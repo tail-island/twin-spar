@@ -189,7 +189,7 @@ And save.
 
 ## Documentation
 
-Please wailt a while...
+Now writing... Please wailt a while...
 
 ## License
 
