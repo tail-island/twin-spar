@@ -16,8 +16,8 @@
   (result-set-read-column [this metadata index]
     (time.coerce/from-sql-time this)))
 
+;; Returns the escaped name String.
 (def sql-name
-  ^{:doc "Returns the escaped name String."}
   (jdbc/as-sql-name (jdbc/quoted \")))
 
 (defn dissoc-in
