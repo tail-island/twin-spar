@@ -263,13 +263,13 @@
           (many-to-one-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :many-to-one-relationships
-                                             (fn [relationship-key relationship] (not= (:table-key relationship) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
-                                             (fn [relationship-key relationship] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
+                                             (fn [relationship-key relationship-schema] (not= (:table-key relationship-schema) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
+                                             (fn [relationship-key relationship-schema] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
           (one-to-many-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :one-to-many-relationships
-                                             (fn [relationship-key relationship] true)
-                                             (fn [relationship-key relationship] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship)) :key])))]
+                                             (fn [relationship-key relationship-schema] true)
+                                             (fn [relationship-key relationship-schema] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema)) :key])))]
     (let [[sql & sql-parameters] (select-sql database-schema table-key condition)
           recursive-sql          (as-recursive-select-sql table-key sql)]
       (->> (concat [[table-key recursive-sql]]
