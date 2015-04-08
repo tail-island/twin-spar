@@ -38,7 +38,7 @@ Easy data access library for Clojure.
   (println (:name product) (:name (:category product))))
 ```
 
-### Easy update.
+### Easy updating.
 
 ```clojure
 (let [product (user-selected-product)]
