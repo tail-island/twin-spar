@@ -139,7 +139,7 @@ Prepare RDBMS connection.
 
 Create tables.
 
-```
+```clojure
 ;; I drop/create tables on my test fixture.
 (use-fixtures :each (fn [test-function]
                       (try
