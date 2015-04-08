@@ -17,15 +17,18 @@
     (time.coerce/from-sql-time this)))
 
 (def sql-name
+  ^{:doc "Returns the escaped name String."}
   (jdbc/as-sql-name (jdbc/quoted \")))
 
 (defn dissoc-in
+  "Dissociates a value in a nested associative structure, and returns a new map that does not contain a mapping for ks."
   [m [k & ks]]
   (if ks
     (assoc  m k (dissoc-in (get m k) ks))
     (dissoc m k)))
 
 (defn pprint-format
+  "Format an object with pprint formatter."
   [object]
   (->> (with-out-str
          (pprint object))
