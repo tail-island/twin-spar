@@ -191,6 +191,8 @@ And save.
 
 Now writing... Please wailt a while...
 
+[marginalia generated document](http://tail-island.github.io/twin-spar/uberdoc.html)
+
 ## License
 
 Copyright © 2015 OJIMA Ryoji
