@@ -1,0 +1,4 @@
+[submodule "docs"]
+	path = docs
+	url = git@github.com:tail-island/twin-spar.git
+	branch = gh-pages
