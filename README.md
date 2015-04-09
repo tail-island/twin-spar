@@ -189,9 +189,7 @@ And save.
 
 ## Documentation
 
-Now writing... Please wailt a while...
-
-[marginalia generated document](http://tail-island.github.io/twin-spar/uberdoc.html)
+* [API Docs](http://tail-island.github.io/twin-spar/uberdoc.html)
 
 ## License
 

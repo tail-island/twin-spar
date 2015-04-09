@@ -1,4 +1,8 @@
-[submodule "docs"]
-	path = docs
+[submodule "sites"]
+	path = sites
+	url = git@github.com:tail-island/twin-spar.git
+	branch = gh-pages
+[submodule "site"]
+	path = site
 	url = git@github.com:tail-island/twin-spar.git
 	branch = gh-pages
