@@ -7,11 +7,30 @@
             (clj-time      [core    :as    time]))
   (:import  (java.util     UUID)))
 
+;; Please create a map which shows database schema, before calling below functions.
+(comment
+  ;; syntax
+  {:table-key {:columns                   {:column-key       {:type      :column-type}}
+               :many-to-one-relationships {:relationship-key {:table-key :parent-table}}
+               :one-to-many-relationships {:relationship-key {:table-key :child-table, :many-to-one-relationship-key :reverse-relationship-key}}}}
+  
+  ;; example
+  (def database-schema {:products   {:columns                   {:name                {:type      :string}
+                                                                 :price               {:type      :decimal}}
+                                     :many-to-one-relationships {:category            {:table-key :categories}}}
+                        :categories {:columns                   {:name                {:type      :string}}
+                                     :many-to-one-relationships {:superior-category   {:table-key :categories}}
+                                     :one-to-many-relationships {:inferior-categories {:table-key :categories, :many-to-one-relationship-key :superior-category}
+                                                                 :products            {:table-key :products,   :many-to-one-relationship-key :category}}}}))
+
 (defn- many-to-one-relationship-key-to-physical-column-key
+  "Returns a column keyword from many-to-one-relationship-key.  
+   A many-to-one-relationship-key `:parent` is changed to `:parent-key`."
   [key]
   (keyword (<< "~(name key)-key")))
 
 (defn- physical-column-keys
+  "Returns all columns' keywords on the table."
   [table-schema]
   (let [{:keys [columns many-to-one-relationships one-to-many-relationships]} table-schema]
     (concat [:key :modified-at]
@@ -20,18 +39,36 @@
                  (map many-to-one-relationship-key-to-physical-column-key)))))
 
 (defn- merge-changes
+  "Merge database changes.  
+   The database change is a map like `{:table-key {:row-key {:column-key changed-value}}}`."
   [& map-or-changes]
   (apply merge-with (partial merge-with merge) map-or-changes))
 
 (defn new-key
+  "Generates a new row's key."
   []
   (UUID/randomUUID))
 
 (defprotocol IDatabaseElement
-  (get-data    [_])
-  (get-changes [_]))
+  "A database element. Tables and rows."
+  (get-data    [_] "Returns a map that shows data.")
+  (get-changes [_] "Returns a map that shows how changes"))
 
 (defn- row
+  "Creates a row object.
+
+   * `(:column-key row)`  
+     -> a column-value
+   * `(:many-to-one-relationship-key row)`  
+     -> a parent row
+   * `(:one-to-many-relatoinship-key row)`  
+     -> sequence of child rows
+   * `(assoc row :column-key column-value)`  
+     the column value will be changed.
+   * `(assoc row :many-to-one-relationship-key parent-row)`  
+     row's foreign key will be changed and parent-row's changes will be merged.
+   * `(assoc row :one-to-many-relationship-key sequence-of-rows)`  
+     sorry, not allowed..."
   [database table-key {:keys [many-to-one-relationships one-to-many-relationships] :as table-schema} row-data & {:keys [changes]}]
   (reify
     clojure.lang.IPersistentMap
@@ -69,6 +106,14 @@
       changes)))
 
 (defn- table
+  "Creates a table object.
+
+   For inserting a new row, please use below code.  
+   `(assoc table (new-key) map)`  
+   don't associate the key to map. relationship-key and physical-column-key are both allowed in map.
+
+   For deleting a row, please use below code.  
+   `(dissoc table row-key)`"
   [database table-key {:keys [many-to-one-relationships] :as table-schema} table-data & {:keys [changes]}]
   (reify
     clojure.lang.IPersistentMap
@@ -85,7 +130,7 @@
     (assoc [_ key val]
       (assert (or (= (:key val) nil) (= (:key val) key)) "changing key is not supported.")
       (if (:key val)
-        (table database table-key table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))
+        (table database table-key table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))  ; TODO: table-dataにもchangesをマージする。
         (let [val (assoc (reduce-kv #(apply assoc
                                        %1 (cond-> [%2 %3]
                                             (contains? many-to-one-relationships %2) ((fn [[relationship-key row]]
@@ -110,12 +155,14 @@
     (get-changes [_]
       changes)))
 
-(defprotocol IDatabase
-  (get-inserted-rows [_])
-  (get-modified-rows [_])
-  (get-deleted-rows  [_]))
+(defprotocol IDatabase  ; TODO: get-dataを追加する。そうしないと、セッションに格納したりマージしたりできなくなってしまう。
+  "The database in memory."
+  (get-inserted-rows [_] "Returns inserted rows.")
+  (get-modified-rows [_] "Returns modified rows.")
+  (get-deleted-rows  [_] "Returns deleted rows."))
 
 (defn database
+  "Creates a database object. Plese create database-data by database-data function."
   [database-schema database-data]
   (letfn [(get-updated-rows [pred]
             (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row-data]
@@ -145,16 +192,20 @@
       (get-deleted-rows [_]
         (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))
 
+;; Operators that can be used in get-data condition DSL.
 (def operators
   (atom #{}))
 
+;; Functions that will be used when generating where clause.
 (def where-clause-fns
   (atom {}))
 
+;; Functions that will be used when generating sql parameters.
 (def sql-parameters-fns
   (atom {}))
 
 (defmacro defoperator
+  "Define a new operator."
   [operator & {:keys [where-clause-fn sql-parameters-fn]}]
   `(do (swap! operators          conj  '~operator)
        (swap! where-clause-fns   assoc '~operator (or ~where-clause-fn
@@ -165,6 +216,7 @@
          [& xs#]
          `(vector '~'~operator ~@xs#))))
 
+;; Define operators.
 (defoperator $and)
 (defoperator $or)
 (defoperator $not
@@ -183,6 +235,10 @@
   :sql-parameters-fn #(second %))
 
 (defn- select-sql
+  "Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.
+   
+   * If you want to select products whose name is 'x', use `($= :name \"x\")`.
+   * If you want to select by another table's column value, use `($= :parent-key.children-key.column-key \"x\")`."
   [database-schema table-key & [condition]]
   (let [alias-number (atom 0)]
     (letfn [(normalize-property-key [table-key alias-key [property-key & more]]
@@ -227,13 +283,21 @@
           (<< "SELECT DISTINCT ~(sql-name table-key).* FROM ~(sql-name table-key) ~{join-clause} ~(and where-clause \"WHERE\") ~{where-clause}")
           sql-parameters)))))
 
-(defn merge-map-to-database-data
+(defn merge-map-to-database-data  ; TODO: modified?やdeleted?を考慮する。
+  "Merge the jdbc/query result map to the database-data map."
   [database-data table-key map]
   (update-in database-data [table-key] #(reduce (fn [result row] (assoc result (:key row) row))
                                                 %
                                                 map)))
 
 (defn database-data
+  "Getting data from RDBMS.
+
+   Tracking back one-to-many-relationships and tracking back ALL many-to-one-relationships.
+   
+   When table-key is :products, the result contains order-details (children of product) and categories (parent of product), orders (parent of order-detail) and maybe more categories (if category has parent category).
+
+   For seeing executed sql, please set INFO to log4j log level."
   [database-schema database-spec table-key & [condition other-data]]
   (letfn [(as-recursive-select-sql [table-key sql]
             (let [recursive-relationship-keys (->> (get-in database-schema [table-key :many-to-one-relationships])
@@ -263,13 +327,13 @@
           (many-to-one-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :many-to-one-relationships
-                                             (fn [relationship-key relationship] (not= (:table-key relationship) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
-                                             (fn [relationship-key relationship] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
+                                             (fn [relationship-key relationship-schema] (not= (:table-key relationship-schema) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
+                                             (fn [relationship-key relationship-schema] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
           (one-to-many-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :one-to-many-relationships
-                                             (fn [relationship-key relationship] true)
-                                             (fn [relationship-key relationship] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship)) :key])))]
+                                             (fn [relationship-key relationship-schema] true)
+                                             (fn [relationship-key relationship-schema] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema)) :key])))]
     (let [[sql & sql-parameters] (select-sql database-schema table-key condition)
           recursive-sql          (as-recursive-select-sql table-key sql)]
       (->> (concat [[table-key recursive-sql]]
@@ -281,6 +345,7 @@
                    (or other-data {}))))))
 
 (defn save!
+  "Save all updates to RDBMS."
   [database-schema database-spec database]
   (letfn [(concurrent-control [execute-results]
             (when (not= (first execute-results) 1)
@@ -305,6 +370,7 @@
       (doseq [table-key (keys database-schema)]
         (apply update table-key (map #(vals (get % table-key)) updates))))))
 
+;; Types in database-schema.
 (def ^:private ^:const database-types
   {:string    "text"
    :integer   "integer"
@@ -313,6 +379,7 @@
    :timestamp "timestamp"})
 
 (defn create-tables
+  "Create tables."
   [database-schema database-spec]
   (letfn [(column-spec [[column-key {:keys [type]}]]
             [column-key (get database-types type)])
@@ -328,6 +395,7 @@
                                                    [:entities (jdbc/quoted \")]))))))
 
 (defn drop-tables
+  "Drop tables"
   [database-schema database-spec]
   (doseq [[table-key _] database-schema]
     (jdbc/db-do-commands database-spec (jdbc/drop-table-ddl table-key :entities (jdbc/quoted \")))))
