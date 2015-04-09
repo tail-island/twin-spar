@@ -2868,12 +2868,11 @@ net.brehaut.ClojureTools = (function (SH) {
 </script><title>twin-spar -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="http://github.com/tail-island">twin-spar</a></h1><h2 class="project-version">0.1.0</h2><br /><p>twin-spar: Easy data accesss library</p>
 </div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.6.0</td></tr><tr><td class="dep-name">org.clojure/core.incubator</td><td class="dotted"><hr /></td><td class="dep-version">0.1.3</td></tr><tr><td class="dep-name">org.clojure/tools.logging</td><td class="dotted"><hr /></td><td class="dep-version">0.3.1</td></tr><tr><td class="dep-name">org.clojure/java.jdbc</td><td class="dotted"><hr /></td><td class="dep-version">0.3.6</td></tr><tr><td class="dep-name">clj-time</td><td class="dotted"><hr /></td><td class="dep-version">0.9.0</td></tr><tr><td class="dep-name">log4j</td><td class="dotted"><hr /></td><td class="dep-version">1.2.17</td></tr><tr><td class="dep-name">org.postgresql/postgresql</td><td class="dotted"><hr /></td><td class="dep-version">9.4-1201-jdbc41</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#twin-spar.common">twin-spar.common</a></li><li><a href="#twin-spar.core">twin-spar.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#twin-spar.common" name="twin-spar.common"><h1 class="project-name">twin-spar.common</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns twin-spar.common
-  (:require (clojure             [pprint :refer :all])
-            (clojure.java        [jdbc   :as    jdbc])
-            (clj-time            [coerce :as    time.coerce]))
-  (:import  (java.sql            Timestamp)
-            (org.joda.time       DateTime)
-            (org.postgresql.util PGobject)))</pre></td></tr><tr><td class="docs">
+  (:require (clojure       [pprint :refer :all])
+            (clojure.java  [jdbc   :as    jdbc])
+            (clj-time      [coerce :as    time.coerce]))
+  (:import  (java.sql      Timestamp)
+            (org.joda.time DateTime)))</pre></td></tr><tr><td class="docs"><p>Extending JDBC types for clj-time.</p>
 </td><td class="codes"><pre class="brush: clojure">(extend-protocol jdbc/ISQLValue
   DateTime
   (sql-value [this]
@@ -2881,14 +2880,14 @@ net.brehaut.ClojureTools = (function (SH) {
 </td><td class="codes"><pre class="brush: clojure">(extend-protocol jdbc/IResultSetReadColumn
   Timestamp
   (result-set-read-column [this metadata index]
-    (time.coerce/from-sql-time this)))</pre></td></tr><tr><td class="docs">
+    (time.coerce/from-sql-time this)))</pre></td></tr><tr><td class="docs"><p>Returns an escaped name string.</p>
 </td><td class="codes"><pre class="brush: clojure">(def sql-name
-  (jdbc/as-sql-name (jdbc/quoted \&quot;)))</pre></td></tr><tr><td class="docs">
+  (jdbc/as-sql-name (jdbc/quoted \&quot;)))</pre></td></tr><tr><td class="docs"><p>Dissociates a value in a nested associative structure, and returns a new map that does not contain a mapping for keys.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn dissoc-in
-  [m [k &amp; ks]]
-  (if ks
-    (assoc  m k (dissoc-in (get m k) ks))
-    (dissoc m k)))</pre></td></tr><tr><td class="docs">
+  [map [key &amp; more]]
+  (if more
+    (assoc  map key (dissoc-in (get map key) more))
+    (dissoc map key)))</pre></td></tr><tr><td class="docs"><p>Format an object with pprint formatter.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn pprint-format
   [object]
   (-&gt;&gt; (with-out-str
@@ -2902,26 +2901,56 @@ net.brehaut.ClojureTools = (function (SH) {
             (clojure.tools [logging :as    log])
             (clojure.java  [jdbc    :as    jdbc])
             (clj-time      [core    :as    time]))
-  (:import  (java.util     UUID)))</pre></td></tr><tr><td class="docs">
+  (:import  (java.util     UUID)))</pre></td></tr><tr><td class="docs"><p>Please create a map which shows database schema, before calling below functions.</p>
+</td><td class="codes"><pre class="brush: clojure">(comment
+  ;; syntax
+  {:table-key {:columns                   {:column-key       {:type      :column-type}}
+               :many-to-one-relationships {:relationship-key {:table-key :parent-table}}
+               :one-to-many-relationships {:relationship-key {:table-key :child-table, :many-to-one-relationship-key :reverse-relationship-key}}}}
+  ;; example
+  (def database-schema {:products   {:columns                   {:name                {:type      :string}
+                                                                 :price               {:type      :decimal}}
+                                     :many-to-one-relationships {:category            {:table-key :categories}}}
+                        :categories {:columns                   {:name                {:type      :string}}
+                                     :many-to-one-relationships {:superior-category   {:table-key :categories}}
+                                     :one-to-many-relationships {:inferior-categories {:table-key :categories, :many-to-one-relationship-key :superior-category}
+                                                                 :products            {:table-key :products,   :many-to-one-relationship-key :category}}}}))</pre></td></tr><tr><td class="docs"><p>Returns a column keyword from many-to-one-relationship-key. <br />
+   A many-to-one-relationship-key <code>:parent</code> is changed to <code>:parent-key</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- many-to-one-relationship-key-to-physical-column-key
   [key]
-  (keyword (&lt;&lt; &quot;~(name key)-key&quot;)))</pre></td></tr><tr><td class="docs">
+  (keyword (&lt;&lt; &quot;~(name key)-key&quot;)))</pre></td></tr><tr><td class="docs"><p>Returns all columns' keywords on the table.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- physical-column-keys
   [table-schema]
   (let [{:keys [columns many-to-one-relationships one-to-many-relationships]} table-schema]
     (concat [:key :modified-at]
             (keys columns)
             (-&gt;&gt; (keys many-to-one-relationships)
-                 (map many-to-one-relationship-key-to-physical-column-key)))))</pre></td></tr><tr><td class="docs">
+                 (map many-to-one-relationship-key-to-physical-column-key)))))</pre></td></tr><tr><td class="docs"><p>Merge database changes. <br />
+   The database change is a map like <code>{:table-key {:row-key {:column-key changed-value}}}</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- merge-changes
   [&amp; map-or-changes]
-  (apply merge-with (partial merge-with merge) map-or-changes))</pre></td></tr><tr><td class="docs">
+  (apply merge-with (partial merge-with merge) map-or-changes))</pre></td></tr><tr><td class="docs"><p>Generates a new row's key.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn new-key
   []
-  (UUID/randomUUID))</pre></td></tr><tr><td class="docs">
+  (UUID/randomUUID))</pre></td></tr><tr><td class="docs"><p>A database element. Tables and rows.</p>
 </td><td class="codes"><pre class="brush: clojure">(defprotocol IDatabaseElement
-  (get-data    [_])
-  (get-changes [_]))</pre></td></tr><tr><td class="docs">
+  (get-data    [_] &quot;Returns a map that shows data.&quot;)
+  (get-changes [_] &quot;Returns a map that shows how changes&quot;))</pre></td></tr><tr><td class="docs"><p>Creates a row object.</p>
+
+<ul>
+<li><code>(:column-key row)</code> <br />
+ -> a column-value</li>
+<li><code>(:many-to-one-relationship-key row)</code> <br />
+ -> a parent row</li>
+<li><code>(:one-to-many-relatoinship-key row)</code> <br />
+ -> sequence of child rows</li>
+<li><code>(assoc row :column-key column-value)</code> <br />
+ the column value will be changed.</li>
+<li><code>(assoc row :many-to-one-relationship-key parent-row)</code> <br />
+ row's foreign key will be changed and parent-row's changes will be merged.</li>
+<li><code>(assoc row :one-to-many-relationship-key sequence-of-rows)</code> <br />
+ sorry, not allowed...</li>
+</ul>
 </td><td class="codes"><pre class="brush: clojure">(defn- row
   [database table-key {:keys [many-to-one-relationships one-to-many-relationships] :as table-schema} row-data &amp; {:keys [changes]}]
   (reify
@@ -2957,7 +2986,14 @@ net.brehaut.ClojureTools = (function (SH) {
     (get-data [_]
       row-data)
     (get-changes [_]
-      changes)))</pre></td></tr><tr><td class="docs">
+      changes)))</pre></td></tr><tr><td class="docs"><p>Creates a table object.</p>
+
+<p>   For inserting a new row, please use below code. <br />
+   <code>(assoc table (new-key) map)</code> <br />
+   don't associate the key to map. relationship-key and physical-column-key are both allowed in map.</p>
+
+<p>   For deleting a row, please use below code. <br />
+   <code>(dissoc table row-key)</code></p>
 </td><td class="codes"><pre class="brush: clojure">(defn- table
   [database table-key {:keys [many-to-one-relationships] :as table-schema} table-data &amp; {:keys [changes]}]
   (reify
@@ -2975,7 +3011,7 @@ net.brehaut.ClojureTools = (function (SH) {
     (assoc [_ key val]
       (assert (or (= (:key val) nil) (= (:key val) key)) &quot;changing key is not supported.&quot;)
       (if (:key val)
-        (table database table-key table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))
+        (table database table-key table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))  ; TODO: table-dataにもchangesをマージする。
         (let [val (assoc (reduce-kv #(apply assoc
                                        %1 (cond-&gt; [%2 %3]
                                             (contains? many-to-one-relationships %2) ((fn [[relationship-key row]]
@@ -2998,11 +3034,11 @@ net.brehaut.ClojureTools = (function (SH) {
     (get-data [_]
       table-data)
     (get-changes [_]
-      changes)))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defprotocol IDatabase
-  (get-inserted-rows [_])
-  (get-modified-rows [_])
-  (get-deleted-rows  [_]))</pre></td></tr><tr><td class="docs">
+      changes)))</pre></td></tr><tr><td class="docs"><p>The database in memory.</p>
+</td><td class="codes"><pre class="brush: clojure">(defprotocol IDatabase  ; TODO: get-dataを追加する。そうしないと、セッションに格納したりマージしたりできなくなってしまう。
+  (get-inserted-rows [_] &quot;Returns inserted rows.&quot;)
+  (get-modified-rows [_] &quot;Returns modified rows.&quot;)
+  (get-deleted-rows  [_] &quot;Returns deleted rows.&quot;))</pre></td></tr><tr><td class="docs"><p>Creates a database object. Plese create database-data by database-data function.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn database
   [database-schema database-data]
   (letfn [(get-updated-rows [pred]
@@ -3031,13 +3067,13 @@ net.brehaut.ClojureTools = (function (SH) {
       (get-modified-rows [_]
         (get-updated-rows (every-pred (complement :inserted?) :modified? (complement :deleted?))))
       (get-deleted-rows [_]
-        (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))</pre></td></tr><tr><td class="docs">
+        (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))</pre></td></tr><tr><td class="docs"><p>Operators that can be used in get-data condition DSL.</p>
 </td><td class="codes"><pre class="brush: clojure">(def operators
-  (atom #{}))</pre></td></tr><tr><td class="docs">
+  (atom #{}))</pre></td></tr><tr><td class="docs"><p>Functions that will be used when generating where clause.</p>
 </td><td class="codes"><pre class="brush: clojure">(def where-clause-fns
-  (atom {}))</pre></td></tr><tr><td class="docs">
+  (atom {}))</pre></td></tr><tr><td class="docs"><p>Functions that will be used when generating sql parameters.</p>
 </td><td class="codes"><pre class="brush: clojure">(def sql-parameters-fns
-  (atom {}))</pre></td></tr><tr><td class="docs">
+  (atom {}))</pre></td></tr><tr><td class="docs"><p>Define a new operator.</p>
 </td><td class="codes"><pre class="brush: clojure">(defmacro defoperator
   [operator &amp; {:keys [where-clause-fn sql-parameters-fn]}]
   `(do (swap! operators          conj  '~operator)
@@ -3047,7 +3083,7 @@ net.brehaut.ClojureTools = (function (SH) {
                                                       (fn [parameters#] (mapcat identity parameters#))))
        (defmacro ~operator
          [&amp; xs#]
-         `(vector '~'~operator ~@xs#))))</pre></td></tr><tr><td class="docs">
+         `(vector '~'~operator ~@xs#))))</pre></td></tr><tr><td class="docs"><p>Define operators.</p>
 </td><td class="codes"><pre class="brush: clojure">(defoperator $and)
 (defoperator $or)
 (defoperator $not
@@ -3063,7 +3099,12 @@ net.brehaut.ClojureTools = (function (SH) {
 (defoperator $like)
 (defoperator $in
   :where-clause-fn #(format &quot;%s IN (%s)&quot; (first %) (string/join &quot;, &quot; (second %)))
-  :sql-parameters-fn #(second %))</pre></td></tr><tr><td class="docs">
+  :sql-parameters-fn #(second %))</pre></td></tr><tr><td class="docs"><p>Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.</p>
+
+<ul>
+<li>If you want to select products whose name is 'x', use <code>($= :name "x")</code>.</li>
+<li>If you want to select by another table's column value, use <code>($= :parent-key.children-key.column-key "x")</code>.</li>
+</ul>
 </td><td class="codes"><pre class="brush: clojure">(defn- select-sql
   [database-schema table-key &amp; [condition]]
   (let [alias-number (atom 0)]
@@ -3107,12 +3148,18 @@ net.brehaut.ClojureTools = (function (SH) {
       (let [[join-clause where-clause sql-parameters] ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true)))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えます。
         (apply vector
           (&lt;&lt; &quot;SELECT DISTINCT ~(sql-name table-key).* FROM ~(sql-name table-key) ~{join-clause} ~(and where-clause \&quot;WHERE\&quot;) ~{where-clause}&quot;)
-          sql-parameters)))))</pre></td></tr><tr><td class="docs">
-</td><td class="codes"><pre class="brush: clojure">(defn merge-map-to-database-data
+          sql-parameters)))))</pre></td></tr><tr><td class="docs"><p>Merge the jdbc/query result map to the database-data map.</p>
+</td><td class="codes"><pre class="brush: clojure">(defn merge-map-to-database-data  ; TODO: modified?やdeleted?を考慮する。
   [database-data table-key map]
   (update-in database-data [table-key] #(reduce (fn [result row] (assoc result (:key row) row))
                                                 %
-                                                map)))</pre></td></tr><tr><td class="docs">
+                                                map)))</pre></td></tr><tr><td class="docs"><p>Getting data from RDBMS.</p>
+
+<p>   Tracking back one-to-many-relationships and tracking back ALL many-to-one-relationships.</p>
+
+<p>   When table-key is :products, the result contains order-details (children of product) and categories (parent of product), orders (parent of order-detail) and maybe more categories (if category has parent category).</p>
+
+<p>   For seeing executed sql, please set INFO to log4j log level.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn database-data
   [database-schema database-spec table-key &amp; [condition other-data]]
   (letfn [(as-recursive-select-sql [table-key sql]
@@ -3143,13 +3190,13 @@ net.brehaut.ClojureTools = (function (SH) {
           (many-to-one-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :many-to-one-relationships
-                                             (fn [relationship-key relationship] (not= (:table-key relationship) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
-                                             (fn [relationship-key relationship] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
+                                             (fn [relationship-key relationship-schema] (not= (:table-key relationship-schema) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
+                                             (fn [relationship-key relationship-schema] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
           (one-to-many-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :one-to-many-relationships
-                                             (fn [relationship-key relationship] true)
-                                             (fn [relationship-key relationship] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship)) :key])))]
+                                             (fn [relationship-key relationship-schema] true)
+                                             (fn [relationship-key relationship-schema] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema)) :key])))]
     (let [[sql &amp; sql-parameters] (select-sql database-schema table-key condition)
           recursive-sql          (as-recursive-select-sql table-key sql)]
       (-&gt;&gt; (concat [[table-key recursive-sql]]
@@ -3158,7 +3205,7 @@ net.brehaut.ClojureTools = (function (SH) {
            (reduce (fn [result [table-key sql]]
                      (log/info (&lt;&lt; &quot;Executing SQL.\n~{sql}\n~(pprint-format sql-parameters)&quot;))
                      (merge-map-to-database-data result table-key (jdbc/query database-spec (apply vector sql sql-parameters))))
-                   (or other-data {}))))))</pre></td></tr><tr><td class="docs">
+                   (or other-data {}))))))</pre></td></tr><tr><td class="docs"><p>Save all updates to RDBMS.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn save!
   [database-schema database-spec database]
   (letfn [(concurrent-control [execute-results]
@@ -3182,13 +3229,13 @@ net.brehaut.ClojureTools = (function (SH) {
                      (concurrent-control)))))]
     (let [updates ((juxt get-inserted-rows get-modified-rows get-deleted-rows) database)]
       (doseq [table-key (keys database-schema)]
-        (apply update table-key (map #(vals (get % table-key)) updates))))))</pre></td></tr><tr><td class="docs">
+        (apply update table-key (map #(vals (get % table-key)) updates))))))</pre></td></tr><tr><td class="docs"><p>Types in database-schema.</p>
 </td><td class="codes"><pre class="brush: clojure">(def ^:private ^:const database-types
   {:string    &quot;text&quot;
    :integer   &quot;integer&quot;
    :decimal   &quot;decimal(30,10)&quot;
    :boolean   &quot;boolean&quot;
-   :timestamp &quot;timestamp&quot;})</pre></td></tr><tr><td class="docs">
+   :timestamp &quot;timestamp&quot;})</pre></td></tr><tr><td class="docs"><p>Create tables.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn create-tables
   [database-schema database-spec]
   (letfn [(column-spec [[column-key {:keys [type]}]]
@@ -3202,7 +3249,7 @@ net.brehaut.ClojureTools = (function (SH) {
                                            [:modified-at &quot;timestamp&quot;]
                                            (concat (map column-spec                   (:columns                   table-schema))
                                                    (map many-to-one-relationship-spec (:many-to-one-relationships table-schema))
-                                                   [:entities (jdbc/quoted \&quot;)]))))))</pre></td></tr><tr><td class="docs">
+                                                   [:entities (jdbc/quoted \&quot;)]))))))</pre></td></tr><tr><td class="docs"><p>Drop tables</p>
 </td><td class="codes"><pre class="brush: clojure">(defn drop-tables
   [database-schema database-spec]
   (doseq [[table-key _] database-schema]
