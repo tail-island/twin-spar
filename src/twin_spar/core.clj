@@ -212,9 +212,9 @@
                                                       (fn [parameters#] (string/join (format " %s " (subs (string/upper-case (name '~operator)) 1)) parameters#))))
        (swap! sql-parameters-fns assoc '~operator (or ~sql-parameters-fn
                                                       (fn [parameters#] (mapcat identity parameters#))))
-       (defmacro ~operator
+       (defn ~operator
          [& xs#]
-         `(vector '~'~operator ~@xs#))))
+         (apply vector '~operator xs#))))
 
 ;; Define operators.
 (defoperator $and)
