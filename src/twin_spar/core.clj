@@ -267,9 +267,9 @@
                                     (->> ((get @where-clause-fns (first condition)) (map where-clause (next condition)))
                                          (format "(%s)"))
                                     (map where-clause condition))
-                :else             (if-not (nil? condition)
-                                    "?"
-                                    "NULL")))
+                :else             (if (nil? condition)
+                                    "NULL"
+                                    "?")))
             (sql-parameters [condition]
               (cond
                 (map?  condition) nil
