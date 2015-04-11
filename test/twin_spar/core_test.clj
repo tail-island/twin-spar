@@ -72,7 +72,8 @@
                       (try
                         (drop-tables database-schema database-spec)
                         (catch Exception ex
-                          (.printStackTrace ex)))
+                          ;; (.printStackTrace ex)))
+                          ))
                       (create-tables database-schema database-spec)
                       (jdbc/with-db-transaction [transaction database-spec]
                         (jdbc/insert! transaction :organizations
