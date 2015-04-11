@@ -3081,9 +3081,9 @@ net.brehaut.ClojureTools = (function (SH) {
                                                       (fn [parameters#] (string/join (format &quot; %s &quot; (subs (string/upper-case (name '~operator)) 1)) parameters#))))
        (swap! sql-parameters-fns assoc '~operator (or ~sql-parameters-fn
                                                       (fn [parameters#] (mapcat identity parameters#))))
-       (defmacro ~operator
+       (defn ~operator
          [&amp; xs#]
-         `(vector '~'~operator ~@xs#))))</pre></td></tr><tr><td class="docs"><p>Define operators.</p>
+         (apply vector '~operator xs#))))</pre></td></tr><tr><td class="docs"><p>Define operators.</p>
 </td><td class="codes"><pre class="brush: clojure">(defoperator $and)
 (defoperator $or)
 (defoperator $not
