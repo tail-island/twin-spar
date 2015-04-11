@@ -26,8 +26,7 @@ Easy data access library for Clojure.
 
 ```clojure
 (let [product (user-selected-product)]
-  (println (:name product) (:name (some #(if (= (:key %) (:category-key product))
-                                           %)
+  (println (:name product) (:name (some #(and (= (:key %) (:category-key product)) %)
                                         categories))))
 ```
 

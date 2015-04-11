@@ -305,8 +305,7 @@
 ;;                                               1000])]
     
 ;;     (let [product (first products)]
-;;       (println (:name product) (:name (some #(if (= (:key %) (:category-key product))
-;;                                                %)
+;;       (println (:name product) (:name (some #(and (= (:key %) (:category-key product)) %)
 ;;                                             categories))))
 
 ;;     (let [product (first products)]
