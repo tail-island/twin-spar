@@ -193,25 +193,14 @@
         (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))
 
 ;; Operators that can be used in get-data condition DSL.
-(def operators
-  (atom #{}))
-
-;; Functions that will be used when generating where clause.
-(def where-clause-fns
+(def ^:private operators
   (atom {}))
 
-;; Functions that will be used when generating sql parameters.
-(def sql-parameters-fns
-  (atom {}))
-
-(defmacro defoperator
+(defmacro ^:private defoperator
   "Define a new operator."
-  [operator & {:keys [where-clause-fn sql-parameters-fn]}]
-  `(do (swap! operators          conj  '~operator)
-       (swap! where-clause-fns   assoc '~operator (or ~where-clause-fn
-                                                      (fn [parameters#] (string/join (format " %s " (subs (string/upper-case (name '~operator)) 1)) parameters#))))
-       (swap! sql-parameters-fns assoc '~operator (or ~sql-parameters-fn
-                                                      (fn [parameters#] (mapcat identity parameters#))))
+  [operator & [where-clause-fn sql-parameters-fn]]
+  `(do (swap! operators assoc '~operator {:where-clause-fn   (or ~where-clause-fn   (fn [parameters#] (string/join ~(format " %s " (subs (string/upper-case (name operator)) 1)) parameters#)))
+                                          :sql-parameters-fn (or ~sql-parameters-fn (fn [parameters#] (mapcat identity parameters#)))})
        (defn ~operator
          [& xs#]
          (apply vector '~operator xs#))))
@@ -220,8 +209,8 @@
 (defoperator $and)
 (defoperator $or)
 (defoperator $not
-  :where-clause-fn #(format "NOT %s" (first %))
-  :sql-parameters-fn #(first %))
+  #(format "NOT %s" (first %))
+  #(first %))
 (defoperator $<)
 (defoperator $>)
 (defoperator $<=)
@@ -231,8 +220,8 @@
 (defoperator $is)
 (defoperator $like)
 (defoperator $in
-  :where-clause-fn #(format "%s IN (%s)" (first %) (string/join ", " (second %)))
-  :sql-parameters-fn #(second %))
+  #(format "%s IN (%s)" (first %) (string/join ", " (second %)))
+  #(second %))
 
 (defn- select-sql
   "Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.
@@ -263,9 +252,8 @@
             (where-clause [condition]
               (cond
                 (map?  condition) (:where-clause condition)
-                (coll? condition) (if (contains? @operators (first condition))
-                                    (->> ((get @where-clause-fns (first condition)) (map where-clause (next condition)))
-                                         (format "(%s)"))
+                (coll? condition) (if-let [where-clause-fn (get-in @operators [(first condition) :where-clause-fn])]
+                                    (format "(%s)" (where-clause-fn (map where-clause (next condition))))
                                     (map where-clause condition))
                 :else             (if-not (nil? condition)
                                     "?"
@@ -273,8 +261,8 @@
             (sql-parameters [condition]
               (cond
                 (map?  condition) nil
-                (coll? condition) (if (contains? @operators (first condition))
-                                    ((get @sql-parameters-fns (first condition)) (map sql-parameters (next condition)))
+                (coll? condition) (if-let [sql-parameters-fn (get-in @operators [(first condition) :sql-parameters-fn])]
+                                    (sql-parameters-fn (map sql-parameters (next condition)))
                                     (mapcat sql-parameters condition))
                 :else             (if-not (nil? condition)
                                     [condition])))]

@@ -68,28 +68,28 @@ SELECT "employees".* FROM (
 
 ```sql
 SELECT DISTINCT
-  products.*
+  "products".*
 FROM
   products
-    LEFT JOIN order-details AS t-1 ON (
-      t-1.product-key = products.key
+    LEFT JOIN "order-details" AS "t-1" ON (
+      "t-1"."product-key" = "products"."key"
     )
-    LEFT JOIN orders AS t-2 ON (
-      t-2.key = t-1.order-key
+    LEFT JOIN "orders" AS "t-2" ON (
+      "t-2"."key" = "t-1"."order-key"
     )
-    LEFT JOIN customer AS t-3 ON (
-      t-3.key = t-2.customer-key
+    LEFT JOIN "customer" AS "t-3" ON (
+      "t-3"."key" = "t-2"."customer-key"
     )
-    LEFT JOIN favoties AS t-4 on (
-      t-4.product-key = products.key
+    LEFT JOIN "favoties" AS "t-4" on (
+      "t-4"."product-key" = "products"."key"
     )
-    LEFT JOIN customers AS t-5 on (
-      t-5.key = t-4.customer-key
+    LEFT JOIN "customers" AS "t-5" on (
+      "t-5"."key" = "t-4"."customer-key"
     )
 WHERE
-  t-3.name = "x"
+  "t-3"."name" = 'x'
   OR
-  t-5.name = "y"
+  "t-5"."name" = 'y'
 ```
 
 最悪、以下になる。効率が悪いような気がするけれど、とりあえず無視。
@@ -101,17 +101,17 @@ WHERE
 
 ```sql
 SELECT DISTINCT
-  products.*
+  "products".*
 FROM
   products
-    LEFT JOIN categories AS t-1 ON (
-      t-1.key = products.category-key
+    LEFT JOIN "categories" AS "t-1" ON (
+      "t-1"."key" = "products"."category-key"
     )
-    LEFT JOIN categories AS t-2 ON (
-      t-2.key = products.category-key
+    LEFT JOIN "categories" AS "t-2" ON (
+      "t-2"."key" = "products"."category-key"
     )
 WHERE
-  t-1.name = "x"
+  "t-1"."name" = 'x'
   OR
-  t-2.name = "y"
+  "t-2"."name" = 'y'
 ```
