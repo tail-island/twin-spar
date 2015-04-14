@@ -3068,27 +3068,20 @@ net.brehaut.ClojureTools = (function (SH) {
         (get-updated-rows (every-pred (complement :inserted?) :modified? (complement :deleted?))))
       (get-deleted-rows [_]
         (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))</pre></td></tr><tr><td class="docs"><p>Operators that can be used in get-data condition DSL.</p>
-</td><td class="codes"><pre class="brush: clojure">(def operators
-  (atom #{}))</pre></td></tr><tr><td class="docs"><p>Functions that will be used when generating where clause.</p>
-</td><td class="codes"><pre class="brush: clojure">(def where-clause-fns
-  (atom {}))</pre></td></tr><tr><td class="docs"><p>Functions that will be used when generating sql parameters.</p>
-</td><td class="codes"><pre class="brush: clojure">(def sql-parameters-fns
+</td><td class="codes"><pre class="brush: clojure">(def ^:private operators
   (atom {}))</pre></td></tr><tr><td class="docs"><p>Define a new operator.</p>
-</td><td class="codes"><pre class="brush: clojure">(defmacro defoperator
-  [operator &amp; {:keys [where-clause-fn sql-parameters-fn]}]
-  `(do (swap! operators          conj  '~operator)
-       (swap! where-clause-fns   assoc '~operator (or ~where-clause-fn
-                                                      (fn [parameters#] (string/join (format &quot; %s &quot; (subs (string/upper-case (name '~operator)) 1)) parameters#))))
-       (swap! sql-parameters-fns assoc '~operator (or ~sql-parameters-fn
-                                                      (fn [parameters#] (mapcat identity parameters#))))
+</td><td class="codes"><pre class="brush: clojure">(defmacro ^:private defoperator
+  [operator &amp; [where-clause-fn sql-parameters-fn]]
+  `(do (swap! operators assoc '~operator {:where-clause-fn   (or ~where-clause-fn   (fn [parameters#] (string/join ~(format &quot; %s &quot; (subs (string/upper-case (name operator)) 1)) parameters#)))
+                                          :sql-parameters-fn (or ~sql-parameters-fn (fn [parameters#] (mapcat identity parameters#)))})
        (defn ~operator
          [&amp; xs#]
          (apply vector '~operator xs#))))</pre></td></tr><tr><td class="docs"><p>Define operators.</p>
 </td><td class="codes"><pre class="brush: clojure">(defoperator $and)
 (defoperator $or)
 (defoperator $not
-  :where-clause-fn #(format &quot;NOT %s&quot; (first %))
-  :sql-parameters-fn #(first %))
+  #(format &quot;NOT %s&quot; (first %))
+  #(first %))
 (defoperator $&lt;)
 (defoperator $&gt;)
 (defoperator $&lt;=)
@@ -3098,8 +3091,8 @@ net.brehaut.ClojureTools = (function (SH) {
 (defoperator $is)
 (defoperator $like)
 (defoperator $in
-  :where-clause-fn #(format &quot;%s IN (%s)&quot; (first %) (string/join &quot;, &quot; (second %)))
-  :sql-parameters-fn #(second %))</pre></td></tr><tr><td class="docs"><p>Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.</p>
+  #(format &quot;%s IN (%s)&quot; (first %) (string/join &quot;, &quot; (second %)))
+  #(second %))</pre></td></tr><tr><td class="docs"><p>Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.</p>
 
 <ul>
 <li>If you want to select products whose name is 'x', use <code>($= :name "x")</code>.</li>
@@ -3130,9 +3123,8 @@ net.brehaut.ClojureTools = (function (SH) {
             (where-clause [condition]
               (cond
                 (map?  condition) (:where-clause condition)
-                (coll? condition) (if (contains? @operators (first condition))
-                                    (-&gt;&gt; ((get @where-clause-fns (first condition)) (map where-clause (next condition)))
-                                         (format &quot;(%s)&quot;))
+                (coll? condition) (if-let [where-clause-fn (get-in @operators [(first condition) :where-clause-fn])]
+                                    (format &quot;(%s)&quot; (where-clause-fn (map where-clause (next condition))))
                                     (map where-clause condition))
                 :else             (if-not (nil? condition)
                                     &quot;?&quot;
@@ -3140,8 +3132,8 @@ net.brehaut.ClojureTools = (function (SH) {
             (sql-parameters [condition]
               (cond
                 (map?  condition) nil
-                (coll? condition) (if (contains? @operators (first condition))
-                                    ((get @sql-parameters-fns (first condition)) (map sql-parameters (next condition)))
+                (coll? condition) (if-let [sql-parameters-fn (get-in @operators [(first condition) :sql-parameters-fn])]
+                                    (sql-parameters-fn (map sql-parameters (next condition)))
                                     (mapcat sql-parameters condition))
                 :else             (if-not (nil? condition)
                                     [condition])))]
