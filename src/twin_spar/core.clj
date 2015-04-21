@@ -164,14 +164,14 @@
 (defn database
   "Creates a database object. Plese create database-data by database-data function."
   [database-schema database-data]
-  (letfn [(get-updated-rows [pred]
-            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row-data]
+  (letfn [(get-updated-rows [this pred]
+            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row]
                                                              (cond-> result
-                                                               (pred row-data) (assoc row-key row-data)))
+                                                               (pred row) (assoc row-key row)))
                                                            {}
                                                            %3)))
                        {}
-                       database-data))]
+                       this))]
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
@@ -184,13 +184,15 @@
              (map #(.entryAt this %))))
       (assoc [_ key val]
         (database database-schema (merge-changes database-data (get-changes val))))
+      (iterator [this]
+        (.iterator (seq this)))
       IDatabase
-      (get-inserted-rows [_]
-        (get-updated-rows (every-pred :inserted? (complement :deleted?))))
-      (get-modified-rows [_]
-        (get-updated-rows (every-pred (complement :inserted?) :modified? (complement :deleted?))))
-      (get-deleted-rows [_]
-        (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))
+      (get-inserted-rows [this]
+        (get-updated-rows this (every-pred :inserted? (complement :deleted?))))
+      (get-modified-rows [this]
+        (get-updated-rows this (every-pred (complement :inserted?) :modified? (complement :deleted?))))
+      (get-deleted-rows [this]
+        (get-updated-rows this (every-pred (complement :inserted?) :deleted?))))))
 
 ;; Operators that can be used in get-data condition DSL.
 (def ^:private operators
@@ -364,6 +366,7 @@
    :integer   "integer"
    :decimal   "decimal(30,10)"
    :boolean   "boolean"
+   :date      "timestamp"
    :timestamp "timestamp"})
 
 (defn create-tables
