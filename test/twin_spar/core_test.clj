@@ -243,26 +243,26 @@
         (is (= "e0" (get-in database [:employees (row-key 32) :superior :name])))))
     (jdbc/with-db-transaction [transaction database-spec]
       (let [database (ts-database (ts-database-data transaction :employees))]
-        (->> (-> database
-                 (assoc-in [:employees (row-key 30) :name]     "E0")
-                 (assoc-in [:employees (row-key 32) :superior] (get-in database [:employees (row-key 31)]))
-                 (assoc-in [:employees (row-key 33)] {:name             "E3"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
-                                                      :superior-key     (row-key 32)
-                                                      :tutor-key        (row-key 34)
-                                                      :organization-key (row-key 12)})
-                 (assoc-in [:employees (row-key 34)] {:name             "E4"
-                                                      :superior         (get-in database [:employees     (row-key 32)])
-                                                      :tutor            nil
-                                                      :organization     (get-in database [:organizations (row-key 12)])})
-                 (assoc-in [:employees (row-key 35)] {:name             "e5"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
-                                                      :superior         (get-in database [:employees     (row-key 32)])
-                                                      :tutor            (get-in database [:employees     (row-key 31)])
-                                                      :organization     (get-in database [:organizations (row-key 12)])})
-                 (assoc-in [:employees (row-key 36)] {:name             "e6"
-                                                      :superior-key     (row-key 32)
-                                                      :tutor-key        (row-key 31)
-                                                      :organization-key (row-key 12)}))
-             (ts-save! transaction))))
+        (-> database
+            (assoc-in [:employees (row-key 30) :name]     "E0")
+            (assoc-in [:employees (row-key 32) :superior] (get-in database [:employees (row-key 31)]))
+            (assoc-in [:employees (row-key 33)] {:name             "E3"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
+                                                 :superior-key     (row-key 32)
+                                                 :tutor-key        (row-key 34)
+                                                 :organization-key (row-key 12)})
+            (assoc-in [:employees (row-key 34)] {:name             "E4"
+                                                 :superior         (get-in database [:employees     (row-key 32)])
+                                                 :tutor            nil
+                                                 :organization     (get-in database [:organizations (row-key 12)])})
+            (assoc-in [:employees (row-key 35)] {:name             "e5"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
+                                                 :superior         (get-in database [:employees     (row-key 32)])
+                                                 :tutor            (get-in database [:employees     (row-key 31)])
+                                                 :organization     (get-in database [:organizations (row-key 12)])})
+            (assoc-in [:employees (row-key 36)] {:name             "e6"
+                                                 :superior-key     (row-key 32)
+                                                 :tutor-key        (row-key 31)
+                                                 :organization-key (row-key 12)})
+            (ts-save! transaction))))
     (jdbc/with-db-transaction [transaction database-spec]
       (let [database (ts-database (ts-database-data transaction :employees))]
         (is (= "E0" (get-in database [:employees (row-key 30) :name])))
@@ -323,7 +323,7 @@
 
   ;;       (let [product  (first (vals (:products database)))
   ;;             database (assoc-in database [:products (:key product) :name] "XXX")]
-  ;;         (my-save! database-spec database))
+  ;;         (my-save! database database-spec))
   ;;       )
 
   ;;     (pprint (jdbc/query database-spec ["SELECT * FROM \"products\""]))))

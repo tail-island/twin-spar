@@ -338,7 +338,7 @@
 
 (defn save!
   "Save all updates to RDBMS."
-  [database-schema database-spec database]
+  [database-schema database database-spec]
   (letfn [(concurrent-control [execute-results]
             (when (not= (first execute-results) 1)
               (throw (ex-info "data had been updated by another user" {}))))

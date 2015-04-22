@@ -70,7 +70,7 @@ Easy data access library for Clojure.
 
 ```clojure
 (let [database (user-updated-database)]
-  (my-save! database-spec database))
+  (my-save! database database-spec))
 ```
 
 ## Getting started
@@ -178,10 +178,10 @@ Using data. You can use get, get-in, assoc, assoc-in, update-in and dissoc.
 And save.
 
 ```clojure
-(->> (-> databse
-         (update-in ...)
-         (update-in ...))
-     (my-save! database-spec))
+(-> databse
+    (update-in ...)
+    (update-in ...)
+    (my-save! database-spec))
 
 ;; twin-spar execute insert/update/delete automatically.
 ```
