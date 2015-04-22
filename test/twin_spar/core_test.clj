@@ -213,12 +213,11 @@
         (is (= "o0" (get-in database [:employees (row-key 31) :superior :organization :name])))
         (is (= ["e3" "e4"]
                (sort (map :name (get-in database [:employees (row-key 31) :subordinates])))))
-        (is (empty?  ; 子を取得するのは、対象テーブルのみです。だから、データベース上にデータがあっても、空になります。
-             (-> (->> (-> database
-                          (get-in [:employees (row-key 31) :subordinates]))
-                      (sort-by :name)
-                      (first))
-                 (get-in [:charges]))))
+        (is (empty? (-> (->> (-> database  ; 子を取得するのは、対象テーブルのみです。だから、データベース上にデータがあっても、空になります。
+                                 (get-in [:employees (row-key 31) :subordinates]))
+                             (sort-by :name)
+                             (first))
+                        (get-in [:charges]))))
         (is (= "e4"  ; 子の親は、再帰的に辿って取得されます。
                (-> (->> (-> database
                             (get-in [:employees (row-key 31) :subordinates]))

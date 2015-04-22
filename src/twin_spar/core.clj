@@ -84,7 +84,8 @@
       (clojure.lang.MapEntry. key (.valAt this key)))
     (seq [this]
       (->> (physical-column-keys table-schema)
-           (map #(.entryAt this %))))
+           (map #(.entryAt this %))
+           (not-empty)))
     (assoc [_ key val]
       (assert (some #(= key %) (concat (physical-column-keys table-schema) (keys many-to-one-relationships))) "row can assoc with only columns and many-to-one-relationships")
       (assert (not= key :key)                                                                                 "changing key is not supported.")
@@ -126,7 +127,8 @@
         (clojure.lang.MapEntry. key val)))
     (seq [this]
       (->> (keys table-data)
-           (keep #(.entryAt this %))))
+           (keep #(.entryAt this %))
+           (not-empty)))
     (assoc [_ key val]
       (assert (or (= (:key val) nil) (= (:key val) key)) "changing key is not supported.")
       (if (:key val)
@@ -148,7 +150,7 @@
     (count [_]
       (count table-data))
     (iterator [this]
-      (.iterator (seq this)))
+      (.iterator (or (seq this) {})))
     IDatabaseElement
     (get-data [_]
       table-data)
@@ -175,17 +177,17 @@
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
-        (if-let [table-data (get database-data key)]
-          (table this key (get database-schema key) table-data)))
+        (table this key (get database-schema key) (get database-data key)))
       (entryAt [this key]
         (clojure.lang.MapEntry. key (.valAt this key)))
       (seq [this]
         (->> (keys database-schema)
-             (map #(.entryAt this %))))
+             (map #(.entryAt this %))
+             (not-empty)))
       (assoc [_ key val]
         (database database-schema (merge-changes database-data (get-changes val))))
       (iterator [this]
-        (.iterator (seq this)))
+        (.iterator (or (seq this) {})))
       IDatabase
       (get-inserted-rows [this]
         (get-updated-rows this (every-pred :inserted? (complement :deleted?))))
