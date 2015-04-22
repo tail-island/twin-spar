@@ -165,7 +165,7 @@
 
 (defn database
   "Creates a database object. Plese create database-data by database-data function."
-  [database-schema database-data]
+  [database-schema & [database-data]]
   (letfn [(get-updated-rows [this pred]
             (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row]
                                                              (cond-> result
