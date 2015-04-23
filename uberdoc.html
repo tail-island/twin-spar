@@ -2865,7 +2865,7 @@ net.brehaut.ClojureTools = (function (SH) {
     build_tree: build_tree
   };
 })(SyntaxHighlighter);
-</script><title>twin-spar -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="http://github.com/tail-island">twin-spar</a></h1><h2 class="project-version">0.1.0</h2><br /><p>twin-spar: Easy data accesss library</p>
+</script><title>twin-spar -- Marginalia</title></head><body><table><tr><td class="docs"><div class="header"><h1 class="project-name"><a href="http://github.com/tail-island">twin-spar</a></h1><h2 class="project-version">0.1.1</h2><br /><p>twin-spar: Easy data accesss library</p>
 </div><div class="dependencies"><h3>dependencies</h3><table><tr><td class="dep-name">org.clojure/clojure</td><td class="dotted"><hr /></td><td class="dep-version">1.6.0</td></tr><tr><td class="dep-name">org.clojure/core.incubator</td><td class="dotted"><hr /></td><td class="dep-version">0.1.3</td></tr><tr><td class="dep-name">org.clojure/tools.logging</td><td class="dotted"><hr /></td><td class="dep-version">0.3.1</td></tr><tr><td class="dep-name">org.clojure/java.jdbc</td><td class="dotted"><hr /></td><td class="dep-version">0.3.6</td></tr><tr><td class="dep-name">clj-time</td><td class="dotted"><hr /></td><td class="dep-version">0.9.0</td></tr><tr><td class="dep-name">log4j</td><td class="dotted"><hr /></td><td class="dep-version">1.2.17</td></tr><tr><td class="dep-name">org.postgresql/postgresql</td><td class="dotted"><hr /></td><td class="dep-version">9.4-1201-jdbc41</td></tr></table></div></td><td class="codes" style="text-align: center; vertical-align: middle;color: #666;padding-right:20px"><br /><br /><br />(this space intentionally left almost blank)</td></tr><tr><td class="docs"><div class="toc"><a name="toc"><h3>namespaces</h3></a><ul><li><a href="#twin-spar.common">twin-spar.common</a></li><li><a href="#twin-spar.core">twin-spar.core</a></li></ul></div></td><td class="codes">&nbsp;</td></tr><tr><td class="docs"><div class="docs-header"><a class="anchor" href="#twin-spar.common" name="twin-spar.common"><h1 class="project-name">twin-spar.common</h1><a class="toc-link" href="#toc">toc</a></a></div></td><td class="codes" /></tr><tr><td class="docs">
 </td><td class="codes"><pre class="brush: clojure">(ns twin-spar.common
   (:require (clojure       [pprint :refer :all])
@@ -2920,12 +2920,11 @@ net.brehaut.ClojureTools = (function (SH) {
   [key]
   (keyword (&lt;&lt; &quot;~(name key)-key&quot;)))</pre></td></tr><tr><td class="docs"><p>Returns all columns' keywords on the table.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- physical-column-keys
-  [table-schema]
-  (let [{:keys [columns many-to-one-relationships one-to-many-relationships]} table-schema]
-    (concat [:key :modified-at]
-            (keys columns)
-            (-&gt;&gt; (keys many-to-one-relationships)
-                 (map many-to-one-relationship-key-to-physical-column-key)))))</pre></td></tr><tr><td class="docs"><p>Merge database changes. <br />
+  [{:keys [columns many-to-one-relationships]}]
+  (concat [:key :modified-at]
+          (keys columns)
+          (-&gt;&gt; (keys many-to-one-relationships)
+               (map many-to-one-relationship-key-to-physical-column-key))))</pre></td></tr><tr><td class="docs"><p>Merge database changes. <br />
    The database change is a map like <code>{:table-key {:row-key {:column-key changed-value}}}</code>.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn- merge-changes
   [&amp; map-or-changes]
@@ -2967,7 +2966,8 @@ net.brehaut.ClojureTools = (function (SH) {
       (clojure.lang.MapEntry. key (.valAt this key)))
     (seq [this]
       (-&gt;&gt; (physical-column-keys table-schema)
-           (map #(.entryAt this %))))
+           (map #(.entryAt this %))
+           (not-empty)))
     (assoc [_ key val]
       (assert (some #(= key %) (concat (physical-column-keys table-schema) (keys many-to-one-relationships))) &quot;row can assoc with only columns and many-to-one-relationships&quot;)
       (assert (not= key :key)                                                                                 &quot;changing key is not supported.&quot;)
@@ -3007,7 +3007,8 @@ net.brehaut.ClojureTools = (function (SH) {
         (clojure.lang.MapEntry. key val)))
     (seq [this]
       (-&gt;&gt; (keys table-data)
-           (keep #(.entryAt this %))))
+           (keep #(.entryAt this %))
+           (not-empty)))
     (assoc [_ key val]
       (assert (or (= (:key val) nil) (= (:key val) key)) &quot;changing key is not supported.&quot;)
       (if (:key val)
@@ -3029,7 +3030,7 @@ net.brehaut.ClojureTools = (function (SH) {
     (count [_]
       (count table-data))
     (iterator [this]
-      (.iterator (seq this)))
+      (.iterator (or (seq this) {})))
     IDatabaseElement
     (get-data [_]
       table-data)
@@ -3040,34 +3041,36 @@ net.brehaut.ClojureTools = (function (SH) {
   (get-modified-rows [_] &quot;Returns modified rows.&quot;)
   (get-deleted-rows  [_] &quot;Returns deleted rows.&quot;))</pre></td></tr><tr><td class="docs"><p>Creates a database object. Plese create database-data by database-data function.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn database
-  [database-schema database-data]
-  (letfn [(get-updated-rows [pred]
-            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row-data]
+  [database-schema &amp; [database-data]]
+  (letfn [(get-updated-rows [this pred]
+            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row]
                                                              (cond-&gt; result
-                                                               (pred row-data) (assoc row-key row-data)))
+                                                               (pred row) (assoc row-key row)))
                                                            {}
                                                            %3)))
                        {}
-                       database-data))]
+                       this))]
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
-        (if-let [table-data (get database-data key)]
-          (table this key (get database-schema key) table-data)))
+        (table this key (get database-schema key) (get database-data key)))
       (entryAt [this key]
         (clojure.lang.MapEntry. key (.valAt this key)))
       (seq [this]
         (-&gt;&gt; (keys database-schema)
-             (map #(.entryAt this %))))
+             (map #(.entryAt this %))
+             (not-empty)))
       (assoc [_ key val]
         (database database-schema (merge-changes database-data (get-changes val))))
+      (iterator [this]
+        (.iterator (or (seq this) {})))
       IDatabase
-      (get-inserted-rows [_]
-        (get-updated-rows (every-pred :inserted? (complement :deleted?))))
-      (get-modified-rows [_]
-        (get-updated-rows (every-pred (complement :inserted?) :modified? (complement :deleted?))))
-      (get-deleted-rows [_]
-        (get-updated-rows (every-pred (complement :inserted?) :deleted?))))))</pre></td></tr><tr><td class="docs"><p>Operators that can be used in get-data condition DSL.</p>
+      (get-inserted-rows [this]
+        (get-updated-rows this (every-pred :inserted? (complement :deleted?))))
+      (get-modified-rows [this]
+        (get-updated-rows this (every-pred (complement :inserted?) :modified? (complement :deleted?))))
+      (get-deleted-rows [this]
+        (get-updated-rows this (every-pred (complement :inserted?) :deleted?))))))</pre></td></tr><tr><td class="docs"><p>Operators that can be used in get-data condition DSL.</p>
 </td><td class="codes"><pre class="brush: clojure">(def ^:private operators
   (atom {}))</pre></td></tr><tr><td class="docs"><p>Define a new operator.</p>
 </td><td class="codes"><pre class="brush: clojure">(defmacro ^:private defoperator
@@ -3199,7 +3202,7 @@ net.brehaut.ClojureTools = (function (SH) {
                      (merge-map-to-database-data result table-key (jdbc/query database-spec (apply vector sql sql-parameters))))
                    (or other-data {}))))))</pre></td></tr><tr><td class="docs"><p>Save all updates to RDBMS.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn save!
-  [database-schema database-spec database]
+  [database-schema database database-spec]
   (letfn [(concurrent-control [execute-results]
             (when (not= (first execute-results) 1)
               (throw (ex-info &quot;data had been updated by another user&quot; {}))))
@@ -3227,6 +3230,7 @@ net.brehaut.ClojureTools = (function (SH) {
    :integer   &quot;integer&quot;
    :decimal   &quot;decimal(30,10)&quot;
    :boolean   &quot;boolean&quot;
+   :date      &quot;timestamp&quot;
    :timestamp &quot;timestamp&quot;})</pre></td></tr><tr><td class="docs"><p>Create tables.</p>
 </td><td class="codes"><pre class="brush: clojure">(defn create-tables
   [database-schema database-spec]
