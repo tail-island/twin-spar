@@ -31,12 +31,11 @@
 
 (defn- physical-column-keys
   "Returns all columns' keywords on the table."
-  [table-schema]
-  (let [{:keys [columns many-to-one-relationships one-to-many-relationships]} table-schema]
-    (concat [:key :modified-at]
-            (keys columns)
-            (->> (keys many-to-one-relationships)
-                 (map many-to-one-relationship-key-to-physical-column-key)))))
+  [{:keys [columns many-to-one-relationships]}]
+  (concat [:key :modified-at]
+          (keys columns)
+          (->> (keys many-to-one-relationships)
+               (map many-to-one-relationship-key-to-physical-column-key))))
 
 (defn- merge-changes
   "Merge database changes.  
