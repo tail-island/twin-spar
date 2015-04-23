@@ -1,4 +1,4 @@
-(defproject com.tail-island/twin-spar "0.1.1"
+(defproject com.tail-island/twin-spar "0.1.2"
   :description  "twin-spar: Easy data accesss library"
   :url          "http://github.com/tail-island"
   :license      {:name "Eclipse Public License"
