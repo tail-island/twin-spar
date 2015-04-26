@@ -234,7 +234,12 @@
       (let [database (ts-database (ts-database-data transaction :products ($or ($= :favorites.customer.name "c1")
                                                                                :order-details.order.customer.vip?)))]
         (is (= ["p1" "p2" "p3"]  ; customer c1 -> favorites p1, customer c2(vip) -> ordered p2 and p3, customer c3(NOT vip) -> ordered p4.
-               (sort (map :name (vals (get-in database [:products])))))))))
+               (sort (map :name (vals (get-in database [:products])))))))
+      (let [database (ts-database (ts-database-data transaction :employees ($or ($= :name "e1") ($= :name "e2"))))]
+        (is (= ["e1" "e2"]
+               (sort (map :name (get-condition-matched-rows database :employees)))))
+        (is (= ["e0" "e1" "e2" "e3" "e4"]
+               (sort (map :name (vals (:employees database)))))))))
 
   (deftest writing-test
     (jdbc/with-db-transaction [transaction database-spec]

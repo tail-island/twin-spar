@@ -96,9 +96,9 @@
           ((fn [[key val changes]]
              (let [modified? (not= (get row-data key) val)]
                (row database table-key table-schema (cond-> (assoc row-data key val)
-                                                      modified? (assoc :modified? true))
+                                                      modified? (assoc :--modified? true))
                     :changes (cond-> (assoc-in changes [table-key (:key row-data) key] val)
-                               modified? (-> (assoc-in [table-key (:key row-data) :modified?] true)))))))))
+                               modified? (-> (assoc-in [table-key (:key row-data) :--modified?] true)))))))))
     IDatabaseElement
     (get-data [_]
       row-data)
@@ -119,7 +119,7 @@
     clojure.lang.IPersistentMap
     (valAt [_ key]
       (if-let [row-data (get table-data key)]
-        (if-not (:deleted? row-data)
+        (if-not (:--deleted? row-data)
           (row database table-key table-schema row-data))))
     (entryAt [this key]
       (if-let [val (.valAt this key)]
@@ -138,13 +138,13 @@
                                                                                         [(many-to-one-relationship-key-to-physical-column-key relationship-key) (:key row)]))))
                                     {}
                                     val)
-                         :key       key
-                         :inserted? (not (contains? table-data key))
-                         :modified? true)]
+                         :key         key
+                         :--inserted? (not (contains? table-data key))
+                         :--modified? true)]
           (table database table-key table-schema (assoc table-data key val) :changes (assoc-in changes [table-key key] val)))))
     (without [this key]
       (if-let [row-data (get table-data key)]
-        (table database table-key table-schema (dissoc table-data key) :changes (update-in changes [table-key key] #(assoc % :deleted? true, :modified true)))
+        (table database table-key table-schema (dissoc table-data key) :changes (update-in changes [table-key key] #(assoc % :--deleted? true, :--modified true)))
         this))
     (count [_]
       (count table-data))
@@ -158,9 +158,10 @@
 
 (defprotocol IDatabase  ; TODO: get-dataを追加する。そうしないと、セッションに格納したりマージしたりできなくなってしまう。
   "The database in memory."
-  (get-inserted-rows [_] "Returns inserted rows.")
-  (get-modified-rows [_] "Returns modified rows.")
-  (get-deleted-rows  [_] "Returns deleted rows."))
+  (get-condition-matched-rows [_ table-key] "Returns rows that matches conditions.")
+  (get-inserted-rows          [_]           "Returns inserted rows.")
+  (get-modified-rows          [_]           "Returns modified rows.")
+  (get-deleted-rows           [_]           "Returns deleted rows."))
 
 (defn database
   "Creates a database object. Plese create database-data by database-data function."
@@ -188,12 +189,14 @@
       (iterator [this]
         (.iterator (or (seq this) {})))
       IDatabase
+      (get-condition-matched-rows [this table-key]
+        (filter :--match-condition? (vals (get this table-key))))
       (get-inserted-rows [this]
-        (get-updated-rows this (every-pred :inserted? (complement :deleted?))))
+        (get-updated-rows this (every-pred :--inserted? (complement :--deleted?))))
       (get-modified-rows [this]
-        (get-updated-rows this (every-pred (complement :inserted?) :modified? (complement :deleted?))))
+        (get-updated-rows this (every-pred (complement :--inserted?) :--modified? (complement :--deleted?))))
       (get-deleted-rows [this]
-        (get-updated-rows this (every-pred (complement :inserted?) :deleted?))))))
+        (get-updated-rows this (every-pred (complement :--inserted?) :--deleted?))))))
 
 ;; Operators that can be used in get-data condition DSL.
 (def ^:private operators
@@ -226,6 +229,10 @@
   #(format "%s IN (%s)" (first %) (string/join ", " (second %)))
   #(second %))
 
+(defn- wrap-select-*
+  [table-key sql]
+  (<< "SELECT ~(sql-name table-key).* FROM (~{sql}) AS ~(sql-name table-key)"))
+
 (defn- select-sql
   "Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.
    
@@ -238,7 +245,7 @@
                                                                          [(many-to-one-relationship-key-to-physical-column-key property-key) (:table-key relationship-schema) :key])
                                                                        (if-let [relationship-schema (get-in database-schema [table-key :one-to-many-relationships property-key])]
                                                                          [:key (:table-key relationship-schema) (many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema))]))]
-                (let [next-alias-key (keyword (<< "_t-~(swap! alias-number inc)"))]
+                (let [next-alias-key (keyword (<< "--t-~(swap! alias-number inc)"))]
                   (-> (normalize-property-key next-table-key next-alias-key more)
                       (update-in [:join-clause] #(str (<< "LEFT JOIN ~(sql-name next-table-key) AS ~(sql-name next-alias-key) ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key))") (and % " ") %))))
                 {:join-clause  nil
@@ -271,13 +278,15 @@
                                     [condition])))]
       (let [[join-clause where-clause sql-parameters] ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true)))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えます。
         (apply vector
-          (<< "SELECT DISTINCT ~(sql-name table-key).* FROM ~(sql-name table-key) ~{join-clause} ~(and where-clause \"WHERE\") ~{where-clause}")
+          (wrap-select-* table-key (<< "SELECT DISTINCT ~(sql-name table-key).*, true AS \"--match-condition?\" FROM ~(sql-name table-key) ~{join-clause} WHERE ~{where-clause}"))
           sql-parameters)))))
 
 (defn merge-map-to-database-data  ; TODO: modified?やdeleted?を考慮する。
   "Merge the jdbc/query result map to the database-data map."
   [database-data table-key map]
-  (update-in database-data [table-key] #(reduce (fn [result row] (assoc result (:key row) row))
+  (update-in database-data [table-key] #(reduce (fn [result row]
+                                                  (cond-> result
+                                                    (not (contains? result (:key row))) (assoc (:key row) row)))
                                                 %
                                                 map)))
 
@@ -295,14 +304,17 @@
                                                    (keep #(if (= (:table-key (second %)) table-key)
                                                             (first %))))]
               (letfn [(to-recursive-sql [sql]
-                        (let [table               (sql-name table-key)
-                              recursive-table-key (keyword (<< "recursive-~(name table-key)"))
-                              recursive-table     (sql-name recursive-table-key)
-                              join-on-clause      (->> recursive-relationship-keys
-                                                       (map #(let [physical-column (sql-name (many-to-one-relationship-key-to-physical-column-key %))]
-                                                               (<< "~{recursive-table}.~{physical-column} = ~{table}.~(sql-name :key)")))
-                                                       (string/join " OR "))]
-                          (<< "SELECT ~{table}.* FROM (WITH RECURSIVE ~{recursive-table} AS (~{sql} UNION SELECT ~{table}.* FROM ~{table} JOIN ~{recursive-table} ON ~{join-on-clause}) SELECT ~{recursive-table}.* FROM ~{recursive-table}) AS ~{table}")))]
+                        (let [table                   (sql-name table-key)
+                              recursive-table         (sql-name (keyword (<< "--r-~(name table-key)")))
+                              recursive-table-columns (->> (physical-column-keys (get database-schema table-key))
+                                                           (map (fn [physical-column-key] (<< "~{recursive-table}.~(sql-name physical-column-key)")))
+                                                           (string/join ", "))
+                              join-on-clause          (->> recursive-relationship-keys
+                                                           (map (fn [relationship-key] (<< "~{recursive-table}.~(sql-name (many-to-one-relationship-key-to-physical-column-key relationship-key)) = ~{table}.\"key\"")))
+                                                           (string/join " OR "))
+                              select-sql-1            (<< "SELECT ~{table}.*, array_agg(~{table}.\"key\") over() AS \"--visited\" FROM (~{sql}) AS ~{table}")
+                              select-sql-2            (<< "SELECT DISTINCT ~{table}.*, false, ~{recursive-table}.\"--visited\" || array_agg(~{table}.\"key\") over() FROM ~{table} JOIN ~{recursive-table} ON ~{join-on-clause} WHERE ~{table}.\"key\" <> ALL(\"--visited\")")]
+                          (wrap-select-* table-key (<< "WITH RECURSIVE ~{recursive-table} AS (~{select-sql-1} UNION ALL ~{select-sql-2}) SELECT ~{recursive-table-columns}, ~{recursive-table}.\"--match-condition?\" FROM ~{recursive-table}"))))]
                 (cond-> sql
                   (not-empty recursive-relationship-keys) (to-recursive-sql)))))
           (relationship-table-key-and-sqls [table-key sql relationship-type continue?-fn column-keys-fn]
@@ -311,7 +323,8 @@
                          (if (continue?-fn relationship-key relationship-schema)
                            (let [[next-column-key previous-column-key] (column-keys-fn relationship-key relationship-schema)
                                  next-table-key                        (:table-key relationship-schema)
-                                 next-sql                              (->> (<< "SELECT ~(sql-name next-table-key).* FROM ~(sql-name next-table-key) WHERE ~(sql-name next-table-key).~(sql-name next-column-key) IN (~(string/replace-first sql \"*\" (sql-name previous-column-key)))")
+                                 next-table                            (sql-name next-table-key)
+                                 next-sql                              (->> (wrap-select-* next-table-key (<< "SELECT ~{next-table}.*, false AS \"--match-condition?\" FROM ~{next-table} WHERE ~{next-table}.~(sql-name next-column-key) IN (~(string/replace-first sql \"*\" (sql-name previous-column-key)))"))
                                                                             (as-recursive-select-sql next-table-key))]
                              (cons [next-table-key next-sql] (many-to-one-relationship-table-key-and-sqls next-table-key next-sql))))))  ; 親方向を再帰で辿ります。マスター・テーブルが不足すると、データとして不完全すぎるためです。で、子方向は、データ量が大きくなりすぎるので、無視します……。
                  (apply concat)))
