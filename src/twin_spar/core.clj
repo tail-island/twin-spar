@@ -247,7 +247,8 @@
                                                                          [:key (:table-key relationship-schema) (many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema))]))]
                 (let [next-alias-key (keyword (<< "--t-~(swap! alias-number inc)"))]
                   (-> (normalize-property-key next-table-key next-alias-key more)
-                      (update-in [:join-clause] #(str (<< "LEFT JOIN ~(sql-name next-table-key) AS ~(sql-name next-alias-key) ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key))") (and % " ") %))))
+                      (update-in [:join-clause] #(str (<< "LEFT JOIN ~(sql-name next-table-key) AS ~(sql-name next-alias-key) "
+                                                          "ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key)) ") %))))
                 {:join-clause  nil
                  :where-clause (<< "~(sql-name alias-key).~(sql-name property-key)")}))
             (normalize-condition [condition]
@@ -311,10 +312,14 @@
                                                            (string/join ", "))
                               join-on-clause          (->> recursive-relationship-keys
                                                            (map (fn [relationship-key] (<< "~{recursive-table}.~(sql-name (many-to-one-relationship-key-to-physical-column-key relationship-key)) = ~{table}.\"key\"")))
-                                                           (string/join " OR "))
-                              select-sql-1            (<< "SELECT ~{table}.*, array_agg(~{table}.\"key\") over() AS \"--visited\" FROM (~{sql}) AS ~{table}")
-                              select-sql-2            (<< "SELECT DISTINCT ~{table}.*, false, ~{recursive-table}.\"--visited\" || array_agg(~{table}.\"key\") over() FROM ~{table} JOIN ~{recursive-table} ON ~{join-on-clause} WHERE ~{table}.\"key\" <> ALL(\"--visited\")")]
-                          (wrap-select-* table-key (<< "WITH RECURSIVE ~{recursive-table} AS (~{select-sql-1} UNION ALL ~{select-sql-2}) SELECT ~{recursive-table-columns}, ~{recursive-table}.\"--match-condition?\" FROM ~{recursive-table}"))))]
+                                                           (string/join " OR "))]
+                          (wrap-select-* table-key (<< "WITH RECURSIVE ~{recursive-table} AS ("
+                                                       "SELECT ~{table}.*, array_agg(~{table}.\"key\") over() AS \"--visited\" FROM (~{sql}) AS ~{table} "
+                                                       "UNION ALL "
+                                                       "SELECT DISTINCT ~{table}.*, false, ~{recursive-table}.\"--visited\" || array_agg(~{table}.\"key\") over() "
+                                                       "FROM ~{table} JOIN ~{recursive-table} ON ~{join-on-clause} "
+                                                       "WHERE ~{table}.\"key\" <> ALL(\"--visited\")) "
+                                                       "SELECT ~{recursive-table-columns}, ~{recursive-table}.\"--match-condition?\" FROM ~{recursive-table}"))))]
                 (cond-> sql
                   (not-empty recursive-relationship-keys) (to-recursive-sql)))))
           (relationship-table-key-and-sqls [table-key sql relationship-type continue?-fn column-keys-fn]
@@ -324,7 +329,9 @@
                            (let [[next-column-key previous-column-key] (column-keys-fn relationship-key relationship-schema)
                                  next-table-key                        (:table-key relationship-schema)
                                  next-table                            (sql-name next-table-key)
-                                 next-sql                              (->> (wrap-select-* next-table-key (<< "SELECT ~{next-table}.*, false AS \"--match-condition?\" FROM ~{next-table} WHERE ~{next-table}.~(sql-name next-column-key) IN (~(string/replace-first sql \"*\" (sql-name previous-column-key)))"))
+                                 next-sql                              (->> (wrap-select-* next-table-key (<< "SELECT ~{next-table}.*, false AS \"--match-condition?\" "
+                                                                                                              "FROM ~{next-table} "
+                                                                                                              "WHERE ~{next-table}.~(sql-name next-column-key) IN (~(string/replace-first sql \"*\" (sql-name previous-column-key)))"))
                                                                             (as-recursive-select-sql next-table-key))]
                              (cons [next-table-key next-sql] (many-to-one-relationship-table-key-and-sqls next-table-key next-sql))))))  ; 親方向を再帰で辿ります。マスター・テーブルが不足すると、データとして不完全すぎるためです。で、子方向は、データ量が大きくなりすぎるので、無視します……。
                  (apply concat)))
