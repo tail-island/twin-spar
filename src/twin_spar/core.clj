@@ -7,7 +7,7 @@
             (clj-time      [core    :as    time]))
   (:import  (java.util     UUID)))
 
-;; Please create a map which shows database schema, before calling below functions.
+;; Please create a map which shows database schema, when using twin-spar.
 (comment
   ;; syntax
   {:table-key {:columns                   {:column-key       {:type      :column-type}}
@@ -230,6 +230,7 @@
   #(second %))
 
 (defn- wrap-select-*
+  "Wrap one more select. For normalizing SQL to 'SELECT T.* FROM ...'. It's easy to use so many cases."
   [table-key sql]
   (<< "SELECT ~(sql-name table-key).* FROM (~{sql}) AS ~(sql-name table-key)"))
 
@@ -298,7 +299,7 @@
    
    When table-key is :products, the result contains order-details (children of product) and categories (parent of product), orders (parent of order-detail) and maybe more categories (if category has parent category).
 
-   For seeing executed sql, please set INFO to log4j log level."
+   For watching executed sql, please set INFO to log4j log level."
   [database-schema database-spec table-key & [condition other-data]]
   (letfn [(as-recursive-select-sql [table-key sql]
             (let [recursive-relationship-keys (->> (get-in database-schema [table-key :many-to-one-relationships])
@@ -338,7 +339,7 @@
           (many-to-one-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
                                              :many-to-one-relationships
-                                             (fn [relationship-key relationship-schema] (not= (:table-key relationship-schema) table-key))  ; 自己参照は、WITH RECURSIVEで実現します。
+                                             (fn [relationship-key relationship-schema] (not= (:table-key relationship-schema) table-key))  ; 自己参照はWITH RECURSIVEで実現しますので、除外します。
                                              (fn [relationship-key relationship-schema] [:key (many-to-one-relationship-key-to-physical-column-key relationship-key)])))
           (one-to-many-relationship-table-key-and-sqls [table-key sql]
             (relationship-table-key-and-sqls table-key sql
