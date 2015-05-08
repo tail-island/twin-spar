@@ -217,7 +217,7 @@
 (defoperator $not
   #(format "NOT %s" (first %))
   #(first %))
-(defoperator $<)
+(defoperator $<)  ; TODO: dateとtimezoneを比較する場合を考慮する。timezoneの情報が抜けおちているので、簡単にはいかなそう。。。
 (defoperator $>)
 (defoperator $<=)
 (defoperator $>=)
@@ -283,7 +283,7 @@
           (wrap-select-* table-key (<< "SELECT DISTINCT ~(sql-name table-key).*, true AS \"--match-condition?\" FROM ~(sql-name table-key) ~{join-clause} WHERE ~{where-clause}"))
           sql-parameters)))))
 
-(defn merge-map-to-database-data  ; TODO: modified?やdeleted?を考慮する。
+(defn merge-map-to-database-data
   "Merge the jdbc/query result map to the database-data map."
   [database-data table-key map]
   (update-in database-data [table-key] #(reduce (fn [result row]

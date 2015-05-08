@@ -207,6 +207,7 @@
       ;; (pprint (ts-database-data transaction :products ($in :charges.employee.tutees.superior.key [(row-key 30) (row-key 31)])))
       ;; (pprint (ts-database-data transaction :products ($is :name nil)))
       ;; (pprint (ts-database-data transaction :products ($not ($is :name nil))))
+      ;; (pprint (ts-database-data transaction :orders ($<= :at (time.coerce/from-date #inst "2015-01-01T00:00:01+09:00")))) 
       (let [database (ts-database (ts-database-data transaction :employees ($= :name "e1")))]
         (is (= "e1" (get-in database [:employees (row-key 31) :name])))
         (is (= "e0" (get-in database [:employees (row-key 31) :superior :name])))
