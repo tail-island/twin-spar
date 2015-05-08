@@ -385,6 +385,7 @@
 ;; Types in database-schema.
 (def ^:private ^:const database-types
   {:string    "text"
+   :text      "text"
    :integer   "integer"
    :decimal   "decimal(30,10)"
    :boolean   "boolean"
