@@ -131,7 +131,7 @@
 
 (deftest on-memory-test
   (let [database (ts-database (jdbc/with-db-transaction [transaction database-spec]
-                                (reduce #(merge-map-to-database-data %1 %2 (jdbc/query transaction [(format "SELECT * FROM %s" (sql-name %2))]))
+                                (reduce #(merge-map-to-database-data %1 %2 (jdbc/query transaction [(format "SELECT * FROM %s" (#'twin-spar.core/sql-name %2))]))
                                         {}
                                         [:organizations :employees :categories :products :charges :orders :order-details])))]
     

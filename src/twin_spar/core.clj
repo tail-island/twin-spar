@@ -38,8 +38,16 @@
     (time.coerce/from-sql-time this)))
 
 ;; Returns an escaped name string.
-(def sql-name
+(def ^:private sql-name
   (jdbc/as-sql-name (jdbc/quoted \")))
+
+(defn- pprint-format
+  "Format an object with pprint formatter."
+  [object]
+  (->> (with-out-str
+         (pprint/pprint object))
+       (butlast)
+       (apply str)))
 
 (defn dissoc-in
   "Dissociates a value in a nested associative structure, and returns a new map that does not contain a mapping for keys."
@@ -47,14 +55,6 @@
   (if more
     (assoc  map key (dissoc-in (get map key) more))
     (dissoc map key)))
-
-(defn pprint-format
-  "Format an object with pprint formatter."
-  [object]
-  (->> (with-out-str
-         (pprint/pprint object))
-       (butlast)
-       (apply str)))
 
 (defn- many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
