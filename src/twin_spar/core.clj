@@ -1,11 +1,14 @@
 (ns twin-spar.core
-  (:use     (twin-spar     common))
-  (:require (clojure       [string  :as    string])
+  (:require (clojure       [pprint  :as    pprint]
+                           [string  :as    string])
             (clojure.core  [strint  :refer :all])
             (clojure.tools [logging :as    log])
             (clojure.java  [jdbc    :as    jdbc])
-            (clj-time      [core    :as    time]))
-  (:import  (java.util     UUID)))
+            (clj-time      [core    :as    time]
+                           [coerce  :as    time.coerce]))
+  (:import  (java.sql      Timestamp)
+            (java.util     UUID)
+            (org.joda.time DateTime)))
 
 ;; Please create a map which shows database schema, when using twin-spar.
 (comment
@@ -22,6 +25,36 @@
                                      :many-to-one-relationships {:superior-category   {:table-key :categories}}
                                      :one-to-many-relationships {:inferior-categories {:table-key :categories, :many-to-one-relationship-key :superior-category}
                                                                  :products            {:table-key :products,   :many-to-one-relationship-key :category}}}}))
+
+;; Extending JDBC types for clj-time.
+(extend-protocol jdbc/ISQLValue
+  DateTime
+  (sql-value [this]
+    (time.coerce/to-timestamp this)))
+
+(extend-protocol jdbc/IResultSetReadColumn
+  Timestamp
+  (result-set-read-column [this metadata index]
+    (time.coerce/from-sql-time this)))
+
+;; Returns an escaped name string.
+(def sql-name
+  (jdbc/as-sql-name (jdbc/quoted \")))
+
+(defn dissoc-in
+  "Dissociates a value in a nested associative structure, and returns a new map that does not contain a mapping for keys."
+  [map [key & more]]
+  (if more
+    (assoc  map key (dissoc-in (get map key) more))
+    (dissoc map key)))
+
+(defn pprint-format
+  "Format an object with pprint formatter."
+  [object]
+  (->> (with-out-str
+         (pprint/pprint object))
+       (butlast)
+       (apply str)))
 
 (defn- many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
@@ -387,7 +420,7 @@
   {:string    "text"
    :text      "text"
    :integer   "integer"
-   :decimal   "decimal(30,10)"
+   :decimal   "decimal"
    :boolean   "boolean"
    :date      "timestamp"
    :timestamp "timestamp"})
@@ -395,8 +428,10 @@
 (defn create-tables
   "Create tables."
   [database-schema database-spec]
-  (letfn [(column-spec [[column-key {:keys [type]}]]
-            [column-key (get database-types type)])
+  (letfn [(column-spec [[column-key {:keys [type] :as column-spec}]]
+            (cond
+              (= type :decimal) [column-key (format "%s(%d, %d)" (get database-types type) (or (:precision column-spec) 30) (or (:scale column-spec) 10))]
+              :else             [column-key (get database-types type)]))
           (many-to-one-relationship-spec [[relationship-key _]]
             [(many-to-one-relationship-key-to-physical-column-key relationship-key) "uuid"])]
     (doseq [[table-key table-schema] database-schema]

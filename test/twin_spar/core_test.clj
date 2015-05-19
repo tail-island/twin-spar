@@ -1,5 +1,5 @@
 (ns twin-spar.core-test
-  (:use     (twin-spar    common core))
+  (:use     (twin-spar    core))
   (:require (clojure      [pprint :refer :all]
                           [string :as    string]
                           [test   :refer :all])
@@ -18,7 +18,7 @@
    :charges       {:many-to-one-relationships {:product                {:table-key :products}
                                                :employee               {:table-key :employees}}}
    :products      {:columns                   {:name                   {:type      :string}
-                                               :price                  {:type      :decimal}}
+                                               :price                  {:type      :decimal,       :precision 10, :scale 2}}
                    :many-to-one-relationships {:category               {:table-key :categories}}
                    :one-to-many-relationships {:charges                {:table-key :charges,       :many-to-one-relationship-key :product}
                                                :order-details          {:table-key :order-details, :many-to-one-relationship-key :product}
