@@ -78,7 +78,7 @@ Easy data access library for Clojure.
 Add following to your <code>project.clj</code>.
 
 ```clojure
-[com.tail-island/twin-spar "0.1.2"]
+[com.tail-island/twin-spar "0.1.3"]
 ```
 
 twin-spar uses log4j and writes so many logs... Please add following into <code>src/log4j.properties</code>.
