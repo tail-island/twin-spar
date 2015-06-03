@@ -56,7 +56,7 @@
     (assoc  map key (dissoc-in (get map key) more))
     (dissoc map key)))
 
-(defn- many-to-one-relationship-key-to-physical-column-key
+(defn many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
    A many-to-one-relationship-key `:parent` is changed to `:parent-key`."
   [key]
@@ -81,9 +81,12 @@
   []
   (UUID/randomUUID))
 
+(defprotocol IDataHolder
+  "Data. Database, tables and rows."
+  (get-data    [_] "Returns a map that shows data."))
+
 (defprotocol IDatabaseElement
   "A database element. Tables and rows."
-  (get-data    [_] "Returns a map that shows data.")
   (get-changes [_] "Returns a map that shows how changes"))
 
 (defn- row
@@ -132,9 +135,10 @@
                                                       modified? (assoc :--modified? true))
                     :changes (cond-> (assoc-in changes [table-key (:key row-data) key] val)
                                modified? (-> (assoc-in [table-key (:key row-data) :--modified?] true)))))))))
-    IDatabaseElement
+    IDataHolder
     (get-data [_]
       row-data)
+    IDatabaseElement
     (get-changes [_]
       changes)))
 
@@ -183,13 +187,14 @@
       (count table-data))
     (iterator [this]
       (.iterator (or (seq this) {})))
-    IDatabaseElement
+    IDataHolder
     (get-data [_]
       table-data)
+    IDatabaseElement
     (get-changes [_]
       changes)))
 
-(defprotocol IDatabase  ; TODO: get-dataを追加する。そうしないと、セッションに格納したりマージしたりできなくなってしまう。
+(defprotocol IDatabase
   "The database in memory."
   (get-condition-matched-rows [_ table-key] "Returns rows that matches conditions.")
   (get-inserted-rows          [_]           "Returns inserted rows.")
@@ -199,14 +204,14 @@
 (defn database
   "Creates a database object. Plese create database-data by database-data function."
   [database-schema & [database-data]]
-  (letfn [(get-updated-rows [this pred]
+  (letfn [(get-updated-rows [pred]
             (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row]
                                                              (cond-> result
                                                                (pred row) (assoc row-key row)))
                                                            {}
                                                            %3)))
                        {}
-                       this))]
+                       database-data))]
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
@@ -221,15 +226,18 @@
         (database database-schema (merge-changes database-data (get-changes val))))
       (iterator [this]
         (.iterator (or (seq this) {})))
+      IDataHolder
+      (get-data [this]
+        database-data)
       IDatabase
       (get-condition-matched-rows [this table-key]
         (filter :--match-condition? (vals (get this table-key))))
       (get-inserted-rows [this]
-        (get-updated-rows this (every-pred :--inserted? (complement :--deleted?))))
+        (get-updated-rows (every-pred :--inserted? (complement :--deleted?))))
       (get-modified-rows [this]
-        (get-updated-rows this (every-pred (complement :--inserted?) :--modified? (complement :--deleted?))))
+        (get-updated-rows (every-pred (complement :--inserted?) :--modified? (complement :--deleted?))))
       (get-deleted-rows [this]
-        (get-updated-rows this (every-pred (complement :--inserted?) :--deleted?))))))
+        (get-updated-rows (every-pred (complement :--inserted?) :--deleted?))))))
 
 ;; Operators that can be used in get-data condition DSL.
 (def ^:private operators
@@ -415,6 +423,8 @@
       (doseq [table-key (keys database-schema)]
         (apply update table-key (map #(vals (get % table-key)) updates))))))
 
+;; TODO: typeにchoiceを追加する。
+
 ;; Types in database-schema.
 (def ^:private ^:const database-types
   {:string    "text"
@@ -428,10 +438,12 @@
 (defn create-tables
   "Create tables."
   [database-schema database-spec]
-  (letfn [(column-spec [[column-key {:keys [type] :as column-spec}]]
-            (cond
-              (= type :decimal) [column-key (format "%s(%d, %d)" (get database-types type) (or (:precision column-spec) 30) (or (:scale column-spec) 10))]
-              :else             [column-key (get database-types type)]))
+  (letfn [(column-spec [[column-key {:keys [type precision scale constraint]}]]
+            [column-key (format "%s %s"
+                                (cond
+                                  (= type :decimal) (format "%s(%d, %d)" (get database-types type) (or precision 30) (or scale 10))
+                                  :else             (get database-types type))
+                     (or constraint ""))])
           (many-to-one-relationship-spec [[relationship-key _]]
             [(many-to-one-relationship-key-to-physical-column-key relationship-key) "uuid"])]
     (doseq [[table-key table-schema] database-schema]

@@ -282,6 +282,8 @@
         (is (= "e6" (get-in database [:employees (row-key 36) :name])))
         (is (= "e2" (get-in database [:employees (row-key 36) :superior :name]))))))
 
+;; TODO: 削除のテストを追加する！
+
   ;; (deftest without-twin-spar-sample
   ;;   (let [products   (jdbc/query database-spec ["SELECT *
   ;;                                                FROM   \"products\"
