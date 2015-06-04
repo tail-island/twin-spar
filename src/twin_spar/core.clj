@@ -423,6 +423,7 @@
       (doseq [table-key (keys database-schema)]
         (apply update table-key (map #(vals (get % table-key)) updates))))))
 
+;; TODO: STIに対応する。
 ;; TODO: typeにchoiceを追加する。
 
 ;; Types in database-schema.
