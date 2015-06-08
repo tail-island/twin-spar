@@ -6,42 +6,65 @@
             (clojure.java [jdbc   :as    jdbc])
             (clj-time     [coerce :as    time.coerce])))
 
+(deftest foo
+  (pprint (#'twin-spar.core/rdbms-database-schema {:a {:columns         {:a1 {:type :string}}}
+                                                   :b {:super-table-key :a
+                                                       :columns         (array-map :b1 {:type :string}
+                                                                                   :b2 {:type :string})}
+                                                   :c {:super-table-key :a
+                                                       :columns         {:c1 {:type :string}}}
+                                                   :d {:super-table-key :b
+                                                       :columns         {:d1 {:type :string}}}})))
+
+;; TODO: productsにnote:textを追加する。
+
 (def ^:private database-schema
-  {:order-details {:columns                   {:quantity               {:type      :integer}}
-                   :many-to-one-relationships {:order                  {:table-key :orders}
-                                               :product                {:table-key :products}}}
-   :orders        {:columns                   {:at                     {:type      :timestamp}}
-                   :many-to-one-relationships {:customer               {:table-key :customers}}
-                   :one-to-many-relationships {:order-details          {:table-key :order-details, :many-to-one-relationship-key :order}}}
-   :favorites     {:many-to-one-relationships {:product                {:table-key :products}
-                                               :customer               {:table-key :customers}}}
-   :charges       {:many-to-one-relationships {:product                {:table-key :products}
-                                               :employee               {:table-key :employees}}}
-   :products      {:columns                   {:name                   {:type      :string}
-                                               :price                  {:type      :decimal,       :precision 10, :scale 2}}
-                   :many-to-one-relationships {:category               {:table-key :categories}}
-                   :one-to-many-relationships {:charges                {:table-key :charges,       :many-to-one-relationship-key :product}
-                                               :order-details          {:table-key :order-details, :many-to-one-relationship-key :product}
-                                               :favorites              {:table-key :favorites,     :many-to-one-relationship-key :product}}}
-   :customers     {:columns                   {:name                   {:type      :string}
-                                               :vip?                   {:type      :boolean}}
-                   :one-to-many-relationships {:orders                 {:table-key :orders,        :many-to-one-relationship-key :customer}
-                                               :favorites              {:table-key :favorites,     :many-to-one-relationship-key :customer}}}
-   :employees     {:columns                   {:name                   {:type      :string}}
-                   :many-to-one-relationships {:superior               {:table-key :employees}
-                                               :tutor                  {:table-key :employees}
-                                               :organization           {:table-key :organizations}}
-                   :one-to-many-relationships {:subordinates           {:table-key :employees,     :many-to-one-relationship-key :superior}
-                                               :tutees                 {:table-key :employees,     :many-to-one-relationship-key :tutor}
-                                               :charges                {:table-key :charges,       :many-to-one-relationship-key :employee}}}
-   :categories    {:columns                   {:name                   {:type      :string}}
-                   :many-to-one-relationships {:superior-category      {:table-key :categories}}
-                   :one-to-many-relationships {:inferior-categories    {:table-key :categories,    :many-to-one-relationship-key :superior-category}
-                                               :products               {:table-key :products,      :many-to-one-relationship-key :category}}}
-   :organizations {:columns                   {:name                   {:type      :string}}
-                   :many-to-one-relationships {:superior-organization  {:table-key :organizations}}
-                   :one-to-many-relationships {:inferior-organizations {:table-key :organizations, :many-to-one-relationship-key :superior-organization}
-                                               :employees              {:table-key :employees,     :many-to-one-relationship-key :organization}}}})
+  {:order-details                  {:columns                   {:quantity                       {:type      :integer}}
+                                    :many-to-one-relationships {:order                          {:table-key :orders}
+                                                                :product                        {:table-key :products}}}
+   :orders                         {:columns                   {:at                             {:type      :timestamp}}
+                                    :many-to-one-relationships {:customer                       {:table-key :customers}}
+                                    :one-to-many-relationships {:order-details                  {:table-key :order-details, :many-to-one-relationship-key :order}}}
+   :favorites                      {:many-to-one-relationships {:product                        {:table-key :products}
+                                                                :customer                       {:table-key :customers}}}
+   :charges                        {:many-to-one-relationships {:product                        {:table-key :products}
+                                                                :employee                       {:table-key :employees}}}
+   :products                       {:columns                   {:name                           {:type      :string}
+                                                                :price                          {:type      :decimal,       :precision 10, :scale 2}}
+                                    :many-to-one-relationships {:category                       {:table-key :categories}}
+                                    :one-to-many-relationships {:charges                        {:table-key :charges,       :many-to-one-relationship-key :product}
+                                                                :order-details                  {:table-key :order-details, :many-to-one-relationship-key :product}
+                                                                :favorites                      {:table-key :favorites,     :many-to-one-relationship-key :product}}}
+   :software-products              {:super-table-key           :products
+                                    :many-to-one-relationships {:os                             {:table-key :os}}}
+   :download-software-products     {:super-table-key           :software-products
+                                    :columns                   {:uri                            {:type      :string}}}
+   :hardware-products              {:super-table-key           :products
+                                    :columns                   {:size                           {:type      :string}}}
+   :composite-products             {:super-table-key           :products
+                                    :one-to-many-relationships {:composite-products-to-products {:table-key :composite-products-to-products, :many-to-one-relationship-key :composite-product}}}
+   :os                             {:columns                   {:name                           {:type      :string}}}
+   :composite-products-to-products {:many-to-one-relationships {:composite-product              {:table-key :composite-products}
+                                                                :prouct                         {:table-key :products}}}
+   :customers                      {:columns                   {:name                           {:type      :string}
+                                                                :vip?                           {:type      :boolean}}
+                                    :one-to-many-relationships {:orders                         {:table-key :orders,                         :many-to-one-relationship-key :customer}
+                                                                :favorites                      {:table-key :favorites,                      :many-to-one-relationship-key :customer}}}
+   :employees                      {:columns                   {:name                           {:type      :string}}
+                                    :many-to-one-relationships {:superior                       {:table-key :employees}
+                                                                :tutor                          {:table-key :employees}
+                                                                :organization                   {:table-key :organizations}}
+                                    :one-to-many-relationships {:subordinates                   {:table-key :employees,                      :many-to-one-relationship-key :superior}
+                                                                :tutees                         {:table-key :employees,                      :many-to-one-relationship-key :tutor}
+                                                                :charges                        {:table-key :charges,                        :many-to-one-relationship-key :employee}}}
+   :categories                     {:columns                   {:name                           {:type      :string}}
+                                    :many-to-one-relationships {:superior-category              {:table-key :categories}}
+                                    :one-to-many-relationships {:inferior-categories            {:table-key :categories,                     :many-to-one-relationship-key :superior-category}
+                                                                :products                       {:table-key :products,                       :many-to-one-relationship-key :category}}}
+   :organizations                  {:columns                   {:name                           {:type      :string}}
+                                    :many-to-one-relationships {:superior-organization          {:table-key :organizations}}
+                                    :one-to-many-relationships {:inferior-organizations         {:table-key :organizations,                  :many-to-one-relationship-key :superior-organization}
+                                                                :employees                      {:table-key :employees,                      :many-to-one-relationship-key :organization}}}})
 
 (def ^:private database-spec
   {:subprotocol "postgresql"
@@ -72,8 +95,8 @@
                       (try
                         (drop-tables database-schema database-spec)
                         (catch Exception ex
-                          ;; (.printStackTrace ex)))
-                          ))
+                          (.printStackTrace ex)))
+                          ;; ))
                       (create-tables database-schema database-spec)
                       (jdbc/with-db-transaction [transaction database-spec]
                         (jdbc/insert! transaction :organizations

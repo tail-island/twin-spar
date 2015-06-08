@@ -13,12 +13,15 @@
 ;; Please create a map which shows database schema, when using twin-spar.
 (comment
   ;; syntax
-  {:table-key {:columns                   {:column-key       {:type      :column-type}}
+  {:table-key {:super-table-key           :super-table-key-when-create-table-by-inherits
+
+               :columns                   {:column-key       {:type      :column-type, :constraint "DB columns constraint"}}
                :many-to-one-relationships {:relationship-key {:table-key :parent-table}}
                :one-to-many-relationships {:relationship-key {:table-key :child-table, :many-to-one-relationship-key :reverse-relationship-key}}}}
   
   ;; example
   (def database-schema {:products   {:columns                   {:name                {:type      :string}
+                                                                 :code                {:type      :string,     :constraint "UNIQUE"}
                                                                  :price               {:type      :decimal}}
                                      :many-to-one-relationships {:category            {:table-key :categories}}}
                         :categories {:columns                   {:name                {:type      :string}}
@@ -56,11 +59,19 @@
     (assoc  map key (dissoc-in (get map key) more))
     (dissoc map key)))
 
+;; TODO: テスト！
+
+(defn root-table-key
+  [database-schema table-key]
+  (if-let [super-table-key (get-in database-schema [table-key :super-table-key])]
+    (recur database-schema super-table-key)
+    table-key))
+
 (defn many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
-   A many-to-one-relationship-key `:parent` is changed to `:parent-key`."
-  [key]
-  (keyword (<< "~(name key)-key")))
+  A many-to-one-relationship-key `:parent` is changed to `:parent-key`."
+  [relationship-key]
+  (keyword (<< "~(name relationship-key)-key")))
 
 (defn- physical-column-keys
   "Returns all columns' keywords on the table."
@@ -72,7 +83,7 @@
 
 (defn- merge-changes
   "Merge database changes.  
-   The database change is a map like `{:table-key {:row-key {:column-key changed-value}}}`."
+  The database change is a map like `{:table-key {:row-key {:column-key changed-value}}}`."
   [& map-or-changes]
   (apply merge-with (partial merge-with merge) map-or-changes))
 
@@ -92,18 +103,18 @@
 (defn- row
   "Creates a row object.
 
-   * `(:column-key row)`  
-     -> a column-value
-   * `(:many-to-one-relationship-key row)`  
-     -> a parent row
-   * `(:one-to-many-relatoinship-key row)`  
-     -> sequence of child rows
-   * `(assoc row :column-key column-value)`  
-     the column value will be changed.
-   * `(assoc row :many-to-one-relationship-key parent-row)`  
-     row's foreign key will be changed and parent-row's changes will be merged.
-   * `(assoc row :one-to-many-relationship-key sequence-of-rows)`  
-     sorry, not allowed..."
+  * `(:column-key row)`  
+  -> a column-value
+  * `(:many-to-one-relationship-key row)`  
+  -> a parent row
+  * `(:one-to-many-relatoinship-key row)`  
+  -> sequence of child rows
+  * `(assoc row :column-key column-value)`  
+  the column value will be changed.
+  * `(assoc row :many-to-one-relationship-key parent-row)`  
+  row's foreign key will be changed and parent-row's changes will be merged.
+  * `(assoc row :one-to-many-relationship-key sequence-of-rows)`  
+  sorry, not allowed..."
   [database table-key {:keys [many-to-one-relationships one-to-many-relationships] :as table-schema} row-data & {:keys [changes]}]
   (reify
     clojure.lang.IPersistentMap
@@ -145,12 +156,12 @@
 (defn- table
   "Creates a table object.
 
-   For inserting a new row, please use below code.  
-   `(assoc table (new-key) map)`  
-   don't associate the key to map. relationship-key and physical-column-key are both allowed in map.
+  For inserting a new row, please use below code.  
+  `(assoc table (new-key) map)`  
+  don't associate the key to map. relationship-key and physical-column-key are both allowed in map.
 
-   For deleting a row, please use below code.  
-   `(dissoc table row-key)`"
+  For deleting a row, please use below code.  
+  `(dissoc table row-key)`"
   [database table-key {:keys [many-to-one-relationships] :as table-schema} table-data & {:keys [changes]}]
   (reify
     clojure.lang.IPersistentMap
@@ -211,7 +222,7 @@
                                                            {}
                                                            %3)))
                        {}
-                       database-data))]
+                       database-data))]  ; 削除されたデータを扱わなければならないので、内部データを使用します。
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
@@ -238,6 +249,44 @@
         (get-updated-rows (every-pred (complement :--inserted?) :--modified? (complement :--deleted?))))
       (get-deleted-rows [this]
         (get-updated-rows (every-pred (complement :--inserted?) :--deleted?))))))
+
+
+;; TODO: テスト！
+
+(defprotocol TableSchema
+  (merge-sub-table-schema [this sub-table-schema]))
+
+(extend-protocol TableSchema
+  clojure.lang.IPersistentMap
+  (merge-sub-table-schema [this sub-table-schema]  ; 順序を保証するために、ごめんなさい、分かりづらいコードになっています。
+    (apply array-map (->> (reduce (fn [map [key value]]
+                                    (assoc map key (merge-sub-table-schema (get map key) value)))
+                                  (array-map)
+                                  (concat this sub-table-schema))
+                          (reverse)
+                          (apply concat))))
+  clojure.lang.IPersistentCollection
+  (merge-sub-table-schema [this sub-table-schema]
+    (vec (concat this sub-table-schema)))
+  Object
+  (merge-sub-table-schema [this sub-table-schema]
+    sub-table-schema)
+  nil
+  (merge-sub-table-schema [this sub-table-schema]
+    sub-table-schema))
+
+(defn- rdbms-database-schema
+  [database-schema]
+  (letfn [(merge-sub-table-schemas [super-table-key super-table-schema]
+            (reduce-kv #(cond-> %1
+                          (= (:super-table-key %3) super-table-key) (merge-sub-table-schema (merge-sub-table-schemas %2 %3)))
+                       super-table-schema
+                       database-schema))]
+    (->> database-schema
+         (remove (fn [[_ table-schema]] (:super-table-key table-schema)))
+         (reduce (fn [result [table-key table-schema]]
+                   (assoc result table-key (merge-sub-table-schemas table-key table-schema)))
+                 {}))))
 
 ;; Operators that can be used in get-data condition DSL.
 (def ^:private operators
@@ -270,60 +319,6 @@
   #(format "%s IN (%s)" (first %) (string/join ", " (second %)))
   #(second %))
 
-(defn- wrap-select-*
-  "Wrap one more select. For normalizing SQL to 'SELECT T.* FROM ...'. It's easy to use so many cases."
-  [table-key sql]
-  (<< "SELECT ~(sql-name table-key).* FROM (~{sql}) AS ~(sql-name table-key)"))
-
-(defn- select-sql
-  "Generates SELECT SQL for getting rows on a table. Defined operators can be used in condition.
-   
-   * If you want to select products whose name is 'x', use `($= :name \"x\")`.
-   * If you want to select by another table's column value, use `($= :parent-key.children-key.column-key \"x\")`."
-  [database-schema table-key & [condition]]
-  (let [alias-number (atom 0)]
-    (letfn [(normalize-property-key [table-key alias-key [property-key & more]]
-              (if-let [[column-key next-table-key next-column-key] (or (if-let [relationship-schema (get-in database-schema [table-key :many-to-one-relationships property-key])]
-                                                                         [(many-to-one-relationship-key-to-physical-column-key property-key) (:table-key relationship-schema) :key])
-                                                                       (if-let [relationship-schema (get-in database-schema [table-key :one-to-many-relationships property-key])]
-                                                                         [:key (:table-key relationship-schema) (many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema))]))]
-                (let [next-alias-key (keyword (<< "--t-~(swap! alias-number inc)"))]
-                  (-> (normalize-property-key next-table-key next-alias-key more)
-                      (update-in [:join-clause] #(str (<< "LEFT JOIN ~(sql-name next-table-key) AS ~(sql-name next-alias-key) "
-                                                          "ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key)) ") %))))
-                {:join-clause  nil
-                 :where-clause (<< "~(sql-name alias-key).~(sql-name property-key)")}))
-            (normalize-condition [condition]
-              (cond
-                (keyword? condition) (normalize-property-key table-key table-key (map keyword (string/split (name condition) #"\.")))
-                (coll?    condition) (map normalize-condition condition)
-                :else                condition))
-            (join-clause [condition]
-              (cond
-                (map?  condition) (:join-clause condition)
-                (coll? condition) (string/join " " (keep (comp not-empty join-clause) condition))))
-            (where-clause [condition]
-              (cond
-                (map?  condition) (:where-clause condition)
-                (coll? condition) (if-let [where-clause-fn (get-in @operators [(first condition) :where-clause-fn])]
-                                    (format "(%s)" (where-clause-fn (map where-clause (next condition))))
-                                    (map where-clause condition))
-                :else             (if-not (nil? condition)
-                                    "?"
-                                    "NULL")))
-            (sql-parameters [condition]
-              (cond
-                (map?  condition) nil
-                (coll? condition) (if-let [sql-parameters-fn (get-in @operators [(first condition) :sql-parameters-fn])]
-                                    (sql-parameters-fn (map sql-parameters (next condition)))
-                                    (mapcat sql-parameters condition))
-                :else             (if-not (nil? condition)
-                                    [condition])))]
-      (let [[join-clause where-clause sql-parameters] ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true)))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えます。
-        (apply vector
-          (wrap-select-* table-key (<< "SELECT DISTINCT ~(sql-name table-key).*, true AS \"--match-condition?\" FROM ~(sql-name table-key) ~{join-clause} WHERE ~{where-clause}"))
-          sql-parameters)))))
-
 (defn merge-map-to-database-data
   "Merge the jdbc/query result map to the database-data map."
   [database-data table-key map]
@@ -336,13 +331,64 @@
 (defn database-data
   "Getting data from RDBMS.
 
-   Tracking back one-to-many-relationships and tracking back ALL many-to-one-relationships.
-   
-   When table-key is :products, the result contains order-details (children of product) and categories (parent of product), orders (parent of order-detail) and maybe more categories (if category has parent category).
+  Defined operators can be used in condition.
+  
+  * If you want to select products whose name is 'x', use `($= :name \"x\")`.
+  * If you want to select by another table's column value, use `($= :parent-key.children-key.column-key \"x\")`.
+  
+  Tracking back one-to-many-relationships and tracking back ALL many-to-one-relationships.
+  
+  When table-key is :products, the result contains order-details (children of product) and categories (parent of product), orders (parent of order-detail) and maybe more categories (if category has parent category).
 
-   For watching executed sql, please set INFO to log4j log level."
+  For watching executed sql, please set INFO to log4j log level."
   [database-schema database-spec table-key & [condition other-data]]
-  (letfn [(as-recursive-select-sql [table-key sql]
+  (letfn [(wrap-select-* [table-key sql]
+            (<< "SELECT ~(sql-name table-key).* FROM (~{sql}) AS ~(sql-name table-key)"))
+          (select-sql []
+            (let [alias-number (atom 0)]
+              (letfn [(normalize-property-key [table-key alias-key [property-key & more]]
+                        (if-let [[column-key next-table-key next-column-key] (or (if-let [relationship-schema (get-in database-schema [table-key :many-to-one-relationships property-key])]
+                                                                                   [(many-to-one-relationship-key-to-physical-column-key property-key) (:table-key relationship-schema) :key])
+                                                                                 (if-let [relationship-schema (get-in database-schema [table-key :one-to-many-relationships property-key])]
+                                                                                   [:key (:table-key relationship-schema) (many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema))]))]
+                          (let [next-alias-key (keyword (<< "--t-~(swap! alias-number inc)"))]
+                            (-> (normalize-property-key next-table-key next-alias-key more)
+                                (update-in [:join-clause] #(string/join " " (keep not-empty [(<< "LEFT JOIN ~(sql-name next-table-key) AS ~(sql-name next-alias-key) "
+                                                                                                 "ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key))")
+                                                                                             %])))))
+                          {:join-clause  nil
+                           :where-clause (<< "~(sql-name alias-key).~(sql-name property-key)")}))
+                      (normalize-condition [condition]
+                        (cond
+                          (keyword? condition) (normalize-property-key table-key table-key (map keyword (string/split (name condition) #"\.")))
+                          (coll?    condition) (map normalize-condition condition)
+                          :else                condition))
+                      (join-clause [condition]
+                        (cond
+                          (map?  condition) (:join-clause condition)
+                          (coll? condition) (string/join " " (keep (comp not-empty join-clause) condition))))
+                      (where-clause [condition]
+                        (cond
+                          (map?  condition) (:where-clause condition)
+                          (coll? condition) (if-let [where-clause-fn (get-in @operators [(first condition) :where-clause-fn])]
+                                              (format "(%s)" (where-clause-fn (map where-clause (next condition))))
+                                              (map where-clause condition))
+                          :else             (if-not (nil? condition)
+                                              "?"
+                                              "NULL")))
+                      (sql-parameters [condition]
+                        (cond
+                          (map?  condition) nil
+                          (coll? condition) (if-let [sql-parameters-fn (get-in @operators [(first condition) :sql-parameters-fn])]
+                                              (sql-parameters-fn (map sql-parameters (next condition)))
+                                              (mapcat sql-parameters condition))
+                          :else             (if-not (nil? condition)
+                                              [condition])))]
+                (let [[join-clause where-clause sql-parameters] ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true)))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えます。
+                  (apply vector
+                    (wrap-select-* table-key (<< "SELECT DISTINCT ~(sql-name table-key).*, true AS \"--match-condition?\" FROM ~(sql-name table-key) ~{join-clause} WHERE ~{where-clause}"))
+                    sql-parameters)))))
+          (as-recursive-select-sql [table-key sql]
             (let [recursive-relationship-keys (->> (get-in database-schema [table-key :many-to-one-relationships])
                                                    (keep #(if (= (:table-key (second %)) table-key)
                                                             (first %))))]
@@ -387,7 +433,7 @@
                                              :one-to-many-relationships
                                              (fn [relationship-key relationship-schema] true)
                                              (fn [relationship-key relationship-schema] [(many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema)) :key])))]
-    (let [[sql & sql-parameters] (select-sql database-schema table-key condition)
+    (let [[sql & sql-parameters] (select-sql)
           recursive-sql          (as-recursive-select-sql table-key sql)]
       (->> (concat [[table-key recursive-sql]]
                    (many-to-one-relationship-table-key-and-sqls table-key recursive-sql)
@@ -403,8 +449,8 @@
   (letfn [(concurrent-control [execute-results]
             (when (not= (first execute-results) 1)
               (throw (ex-info "data had been updated by another user" {}))))
-          (update [table-key & updates]
-            (let [[inserted-rows modified-rows deleted-rows] (let [physical-column-keys (physical-column-keys (get database-schema table-key))]
+          (update [table-key table-schema & updates]
+            (let [[inserted-rows modified-rows deleted-rows] (let [physical-column-keys (physical-column-keys table-schema)]
                                                                (map (fn [updated-rows]
                                                                       (map #(select-keys % physical-column-keys) updated-rows))
                                                                     updates))]
@@ -420,8 +466,8 @@
                 (->> (jdbc/delete! database-spec table-key ["\"key\" = ? AND \"modified-at\" = ?" (:key row) (:modified-at row)] :entities (jdbc/quoted \"))
                      (concurrent-control)))))]
     (let [updates ((juxt get-inserted-rows get-modified-rows get-deleted-rows) database)]
-      (doseq [table-key (keys database-schema)]
-        (apply update table-key (map #(vals (get % table-key)) updates))))))
+      (doseq [[table-key table-schema] (rdbms-database-schema database-schema)]
+        (apply update table-key table-schema (map #(vals (get % table-key)) updates))))))
 
 ;; TODO: STIに対応する。
 ;; TODO: typeにchoiceを追加する。
@@ -444,10 +490,10 @@
                                 (cond
                                   (= type :decimal) (format "%s(%d, %d)" (get database-types type) (or precision 30) (or scale 10))
                                   :else             (get database-types type))
-                     (or constraint ""))])
+                                (or constraint ""))])
           (many-to-one-relationship-spec [[relationship-key _]]
             [(many-to-one-relationship-key-to-physical-column-key relationship-key) "uuid"])]
-    (doseq [[table-key table-schema] database-schema]
+    (doseq [[table-key table-schema] (rdbms-database-schema database-schema)]
       (jdbc/db-do-commands database-spec (apply jdbc/create-table-ddl
                                            table-key
                                            [:key         "uuid NOT NULL PRIMARY KEY"]
@@ -459,5 +505,5 @@
 (defn drop-tables
   "Drop tables"
   [database-schema database-spec]
-  (doseq [[table-key _] database-schema]
+  (doseq [table-key (keys (rdbms-database-schema database-schema))]
     (jdbc/db-do-commands database-spec (jdbc/drop-table-ddl table-key :entities (jdbc/quoted \")))))
