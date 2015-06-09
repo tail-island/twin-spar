@@ -4,17 +4,9 @@
                           [string :as    string]
                           [test   :refer :all])
             (clojure.java [jdbc   :as    jdbc])
-            (clj-time     [coerce :as    time.coerce])))
-
-(deftest foo
-  (pprint (#'twin-spar.core/rdbms-database-schema {:a {:columns         {:a1 {:type :string}}}
-                                                   :b {:super-table-key :a
-                                                       :columns         (array-map :b1 {:type :string}
-                                                                                   :b2 {:type :string})}
-                                                   :c {:super-table-key :a
-                                                       :columns         {:c1 {:type :string}}}
-                                                   :d {:super-table-key :b
-                                                       :columns         {:d1 {:type :string}}}})))
+            (clj-time     [coerce :as    time.coerce])
+            (stem-bearing [core   :refer :all]))
+  (:import  (java.sql     SQLException)))
 
 ;; TODO: productsにnote:textを追加する。
 
@@ -94,9 +86,7 @@
 (use-fixtures :each (fn [test-function]
                       (try
                         (drop-tables database-schema database-spec)
-                        (catch Exception ex
-                          (.printStackTrace ex)))
-                          ;; ))
+                        (catch SQLException ex))
                       (create-tables database-schema database-spec)
                       (jdbc/with-db-transaction [transaction database-spec]
                         (jdbc/insert! transaction :organizations
@@ -154,7 +144,7 @@
 
 (deftest on-memory-test
   (let [database (ts-database (jdbc/with-db-transaction [transaction database-spec]
-                                (reduce #(merge-map-to-database-data %1 %2 (jdbc/query transaction [(format "SELECT * FROM %s" (#'twin-spar.core/sql-name %2))]))
+                                (reduce #(merge-rows-to-database-data %1 %2 (jdbc/query transaction [(format "SELECT * FROM %s" (#'twin-spar.core/sql-name %2))]))
                                         {}
                                         [:organizations :employees :categories :products :charges :orders :order-details])))]
     

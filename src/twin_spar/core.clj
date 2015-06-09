@@ -1,11 +1,11 @@
 (ns twin-spar.core
-  (:require (clojure       [pprint  :as    pprint]
-                           [string  :as    string])
+  (:require (clojure       [string  :as    string])
             (clojure.core  [strint  :refer :all])
             (clojure.tools [logging :as    log])
             (clojure.java  [jdbc    :as    jdbc])
             (clj-time      [core    :as    time]
-                           [coerce  :as    time.coerce]))
+                           [coerce  :as    time.coerce])
+            (stem-bearing  [core    :refer :all]))
   (:import  (java.sql      Timestamp)
             (java.util     UUID)
             (org.joda.time DateTime)))
@@ -44,28 +44,59 @@
 (def ^:private sql-name
   (jdbc/as-sql-name (jdbc/quoted \")))
 
-(defn- pprint-format
-  "Format an object with pprint formatter."
-  [object]
-  (->> (with-out-str
-         (pprint/pprint object))
-       (butlast)
-       (apply str)))
-
-(defn dissoc-in
-  "Dissociates a value in a nested associative structure, and returns a new map that does not contain a mapping for keys."
-  [map [key & more]]
-  (if more
-    (assoc  map key (dissoc-in (get map key) more))
-    (dissoc map key)))
-
 ;; TODO: テスト！
 
-(defn root-table-key
+(defn- root-table-key
   [database-schema table-key]
   (if-let [super-table-key (get-in database-schema [table-key :super-table-key])]
     (recur database-schema super-table-key)
     table-key))
+
+(defn- sub-table-keys
+  [database-schema super-table-key]
+  (cons super-table-key (lazy-seq (->> database-schema
+                                       (keep (fn [[table-key table-schema]]
+                                               (if (= (:super-table-key table-schema) super-table-key)
+                                                 table-key)))
+                                       (map (partial sub-table-keys database-schema))
+                                       (apply concat)))))
+
+(defprotocol TableSchema
+  (merge-sub-table-schema [this sub-table-schema]))
+
+(extend-protocol TableSchema
+  clojure.lang.IPersistentMap
+  (merge-sub-table-schema [this sub-table-schema]  ; 順序を保証するために、ごめんなさい、分かりづらいコードになっています。
+    (apply array-map (->> (reduce (fn [map [key value]]
+                                    (assoc map key (merge-sub-table-schema (get map key) value)))
+                                  (array-map)
+                                  (concat this sub-table-schema))
+                          (reverse)
+                          (apply concat))))
+  clojure.lang.IPersistentCollection
+  (merge-sub-table-schema [this sub-table-schema]
+    (vec (concat this sub-table-schema)))
+  Object
+  (merge-sub-table-schema [this sub-table-schema]
+    sub-table-schema)
+  nil
+  (merge-sub-table-schema [this sub-table-schema]
+    sub-table-schema))
+
+(defn- rdbms-database-schema
+  [database-schema]
+  (letfn [(merge-sub-table-schemas [super-table-key super-table-schema]
+            (->> database-schema
+                 (reduce-kv #(cond-> %1
+                               (= (:super-table-key %3) super-table-key) (merge-sub-table-schema (merge-sub-table-schemas %2 %3)))
+                            super-table-schema)))]
+    (->> database-schema
+         (remove (comp :super-table-key second))
+         (reduce (fn [acc [table-key table-schema]]
+                   (let [rdbms-table-schema (merge-sub-table-schemas table-key table-schema)]
+                       (assoc acc table-key (cond-> rdbms-table-schema
+                                              (not= rdbms-table-schema table-schema) (assoc-in [:columns :type] {:type :string})))))
+                    {}))))
 
 (defn many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
@@ -216,8 +247,8 @@
   "Creates a database object. Plese create database-data by database-data function."
   [database-schema & [database-data]]
   (letfn [(get-updated-rows [pred]
-            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [result row-key row]
-                                                             (cond-> result
+            (reduce-kv #(assoc %1 %2 (not-empty (reduce-kv (fn [acc row-key row]
+                                                             (cond-> acc
                                                                (pred row) (assoc row-key row)))
                                                            {}
                                                            %3)))
@@ -250,44 +281,6 @@
       (get-deleted-rows [this]
         (get-updated-rows (every-pred (complement :--inserted?) :--deleted?))))))
 
-
-;; TODO: テスト！
-
-(defprotocol TableSchema
-  (merge-sub-table-schema [this sub-table-schema]))
-
-(extend-protocol TableSchema
-  clojure.lang.IPersistentMap
-  (merge-sub-table-schema [this sub-table-schema]  ; 順序を保証するために、ごめんなさい、分かりづらいコードになっています。
-    (apply array-map (->> (reduce (fn [map [key value]]
-                                    (assoc map key (merge-sub-table-schema (get map key) value)))
-                                  (array-map)
-                                  (concat this sub-table-schema))
-                          (reverse)
-                          (apply concat))))
-  clojure.lang.IPersistentCollection
-  (merge-sub-table-schema [this sub-table-schema]
-    (vec (concat this sub-table-schema)))
-  Object
-  (merge-sub-table-schema [this sub-table-schema]
-    sub-table-schema)
-  nil
-  (merge-sub-table-schema [this sub-table-schema]
-    sub-table-schema))
-
-(defn- rdbms-database-schema
-  [database-schema]
-  (letfn [(merge-sub-table-schemas [super-table-key super-table-schema]
-            (reduce-kv #(cond-> %1
-                          (= (:super-table-key %3) super-table-key) (merge-sub-table-schema (merge-sub-table-schemas %2 %3)))
-                       super-table-schema
-                       database-schema))]
-    (->> database-schema
-         (remove (fn [[_ table-schema]] (:super-table-key table-schema)))
-         (reduce (fn [result [table-key table-schema]]
-                   (assoc result table-key (merge-sub-table-schemas table-key table-schema)))
-                 {}))))
-
 ;; Operators that can be used in get-data condition DSL.
 (def ^:private operators
   (atom {}))
@@ -319,14 +312,14 @@
   #(format "%s IN (%s)" (first %) (string/join ", " (second %)))
   #(second %))
 
-(defn merge-map-to-database-data
-  "Merge the jdbc/query result map to the database-data map."
-  [database-data table-key map]
-  (update-in database-data [table-key] #(reduce (fn [result row]
-                                                  (cond-> result
-                                                    (not (contains? result (:key row))) (assoc (:key row) row)))
+(defn merge-rows-to-database-data
+  "Merge the jdbc/query result rows to the database-data."
+  [database-data table-key rows]
+  (update-in database-data [table-key] #(reduce (fn [acc row]
+                                                  (cond-> acc
+                                                    (not (contains? acc (:key row))) (assoc (:key row) row)))
                                                 %
-                                                map)))
+                                                rows)))
 
 (defn database-data
   "Getting data from RDBMS.
@@ -439,8 +432,8 @@
                    (many-to-one-relationship-table-key-and-sqls table-key recursive-sql)
                    (one-to-many-relationship-table-key-and-sqls table-key sql))
            (reduce (fn [result [table-key sql]]
-                     (log/info (<< "Executing SQL.\n~{sql}\n~(pprint-format sql-parameters)"))
-                     (merge-map-to-database-data result table-key (jdbc/query database-spec (apply vector sql sql-parameters))))
+                     (log/info (<< "Executing SQL.\n~{sql}\n~(pformat sql-parameters)"))
+                     (merge-rows-to-database-data result table-key (jdbc/query database-spec (apply vector sql sql-parameters))))
                    (or other-data {}))))))
 
 (defn save!
@@ -455,14 +448,14 @@
                                                                       (map #(select-keys % physical-column-keys) updated-rows))
                                                                     updates))]
               (doseq [row inserted-rows]
-                (log/info (<< "Inserting data.\n~{table-key}\n~(pprint-format row)"))
+                (log/info (<< "Inserting data.\n~{table-key}\n~(pformat row)"))
                 (jdbc/insert! database-spec table-key (assoc row :modified-at (time/now)) :entities (jdbc/quoted \")))
               (doseq [row modified-rows]
-                (log/info (<< "Updating data.\n~{table-key}\n~(pprint-format row)"))
+                (log/info (<< "Updating data.\n~{table-key}\n~(pformat row)"))
                 (->> (jdbc/update! database-spec table-key (assoc row :modified-at (time/now)) ["\"key\" = ? AND \"modified-at\" = ?" (:key row) (:modified-at row)] :entities (jdbc/quoted \"))
                      (concurrent-control)))
               (doseq [row deleted-rows]
-                (log/info (<< "Deleting data.\n~{table-key}\n~(pprint-format row)"))
+                (log/info (<< "Deleting data.\n~{table-key}\n~(pformat row)"))
                 (->> (jdbc/delete! database-spec table-key ["\"key\" = ? AND \"modified-at\" = ?" (:key row) (:modified-at row)] :entities (jdbc/quoted \"))
                      (concurrent-control)))))]
     (let [updates ((juxt get-inserted-rows get-modified-rows get-deleted-rows) database)]
@@ -495,10 +488,10 @@
             [(many-to-one-relationship-key-to-physical-column-key relationship-key) "uuid"])]
     (doseq [[table-key table-schema] (rdbms-database-schema database-schema)]
       (jdbc/db-do-commands database-spec (apply jdbc/create-table-ddl
-                                           table-key
-                                           [:key         "uuid NOT NULL PRIMARY KEY"]
-                                           [:modified-at "timestamp"]
-                                           (concat (map column-spec                   (:columns                   table-schema))
+                                           (concat [table-key
+                                                    [:key         "uuid NOT NULL PRIMARY KEY"]
+                                                    [:modified-at "timestamp"]]
+                                                   (map column-spec                   (:columns                   table-schema))
                                                    (map many-to-one-relationship-spec (:many-to-one-relationships table-schema))
                                                    [:entities (jdbc/quoted \")]))))))
 
