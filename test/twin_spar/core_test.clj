@@ -236,16 +236,34 @@
                (get-in database [:employees (row-key 120) :name])))))
 
     (testing "single table inheritance"
+      (is (= ["product 0" "product 1" "product 2" "product 3" "product 4"]
+             (sort (map :name (vals (get-in database [:products]))))))
       (is (= ["product 0" "product 1" "product 2"]
              (sort (map :name (vals (get-in database [:software-products]))))))
+      (is (= ["product 2"]
+             (sort (map :name (vals (get-in database [:download-software-products]))))))
+      
       (is (= "software-products"
              (-> database
                  (assoc-in [:software-products (row-key 155)] {:name "product 5", :price 6000, :category-key (row-key 110), :operating-system-key (row-key 140)})
                  (get-in   [:software-products (row-key 155) :type]))))
+      
+      (is (= "HTTP://TAIL-ISLAND.COM"
+             (-> database
+                 (assoc-in [:download-software-products (row-key 152) :uri] "HTTP://TAIL-ISLAND.COM")
+                 (get-in   [:download-software-products (row-key 152) :uri]))))
+      (is (thrown-with-msg? java.lang.AssertionError #"row can assoc with only columns and many-to-one-relationships"
+            (assoc-in database [:software-products (row-key 152) :uri] "HTTP://TAIL-ISLAND.COM")))
+      (is (= "OPERATING-SYSTEM 0"
+             (-> database
+                 (assoc-in [:software-products (row-key 150) :operating-system :name] "OPERATING-SYSTEM 0")
+                 (get-in   [:software-products (row-key 150) :operating-system :name]))))
+      (is (thrown-with-msg? java.lang.AssertionError #"row can assoc with only columns and many-to-one-relationships"
+            (assoc-in database [:products (row-key 150) :operating-system :name] "OPERATING-SYSTEM 0")))
+      
+      
       (is (= "http://tail-island.com"
-             (get-in database [:download-software-products (row-key 152) :uri])))
-      (is (= "http://tail-island.com"
-             (get-in database [:software-products          (row-key 152) :uri])))             ; カラムへのアクセスに特別な制限をかけていないので、値が取れてしまいます。
+             (get-in database [:software-products (row-key 152) :uri])))                      ; カラムへのアクセスに特別な制限をかけていないので、値が取れてしまいます。
       (is (= "operating-system 0"
              (get-in database [:software-products (row-key 150) :operating-system :name])))
       (is (= nil

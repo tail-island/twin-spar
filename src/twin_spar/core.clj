@@ -44,8 +44,6 @@
 (def ^:private sql-name
   (jdbc/as-sql-name (jdbc/quoted \")))
 
-;; TODO: テスト！
-
 (defprotocol TableSchema
   (merge-super-table-schema [this super-table-schema]))
 
