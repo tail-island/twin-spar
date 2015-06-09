@@ -160,7 +160,7 @@
   row's foreign key will be changed and parent-row's changes will be merged.
   * `(assoc row :one-to-many-relationship-key sequence-of-rows)`  
   sorry, not allowed..."
-  [database table-key {:keys [many-to-one-relationships one-to-many-relationships] :as table-schema} row-data & {:keys [changes]}]
+  [database rdbms-table-key table-keys {:keys [many-to-one-relationships one-to-many-relationships] :as table-schema} row-data & {:keys [changes]}]
   (reify
     clojure.lang.IPersistentMap
     (valAt [_ key]
@@ -187,10 +187,10 @@
                                                                 (merge-changes changes (get-changes val))])))
           ((fn [[key val changes]]
              (let [modified? (not= (get row-data key) val)]
-               (row database table-key table-schema (cond-> (assoc row-data key val)
-                                                      modified? (assoc :--modified? true))
-                    :changes (cond-> (assoc-in changes [table-key (:key row-data) key] val)
-                               modified? (-> (assoc-in [table-key (:key row-data) :--modified?] true)))))))))
+               (row database rdbms-table-key table-keys table-schema (cond-> (assoc row-data key val)
+                                                                       modified? (assoc :--modified? true))
+                    :changes (cond-> (assoc-in changes [rdbms-table-key (:key row-data) key] val)
+                               modified? (assoc-in [rdbms-table-key (:key row-data) :--modified?] true))))))))
     IDataHolder
     (get-data [_]
       row-data)
@@ -207,48 +207,55 @@
 
   For deleting a row, please use below code.  
   `(dissoc table row-key)`"
-  [database table-key {:keys [many-to-one-relationships] :as table-schema} table-data & {:keys [changes]}]
-  (reify
-    clojure.lang.IPersistentMap
-    (valAt [_ key]
-      (if-let [row-data (get table-data key)]
-        (if (not (:--deleted? row-data))
-          (row database table-key table-schema row-data))))
-    (entryAt [this key]
-      (if-let [val (.valAt this key)]
-        (clojure.lang.MapEntry. key val)))
-    (seq [this]
-      (->> (keys table-data)
-           (keep #(.entryAt this %))
-           (not-empty)))
-    (assoc [_ key val]
-      (assert (or (= (:key val) nil) (= (:key val) key)) "changing key is not supported.")
-      (if (:key val)
-        (table database table-key table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))  ; TODO: table-dataにもchangesをマージする。
-        (let [val (assoc (reduce-kv #(apply assoc
-                                       %1 (cond-> [%2 %3]
-                                            (contains? many-to-one-relationships %2) ((fn [[relationship-key row]]
-                                                                                        [(many-to-one-relationship-key-to-physical-column-key relationship-key) (:key row)]))))
-                                    {}
-                                    val)
-                         :key         key
-                         :--inserted? (not (contains? table-data key))
-                         :--modified? true)]
-          (table database table-key table-schema (assoc table-data key val) :changes (assoc-in changes [table-key key] val)))))
-    (without [this key]
-      (if-let [row-data (get table-data key)]
-        (table database table-key table-schema (dissoc table-data key) :changes (update-in changes [table-key key] #(assoc % :--deleted? true, :--modified true)))
-        this))
-    (count [_]
-      (count table-data))
-    (iterator [this]
-      (.iterator (or (seq this) {})))
-    IDataHolder
-    (get-data [_]
-      table-data)
-    IDatabaseElement
-    (get-changes [_]
-      changes)))
+  [database rdbms-table-key table-keys {:keys [super-table-key many-to-one-relationships] :as table-schema} table-data & {:keys [changes]}]
+  (letfn [(valid-row-data? [row-data]
+            (and (or (not super-table-key)
+                     (contains? (set table-keys) (keyword (:type row-data))))
+                 (not (:--deleted? row-data))))]
+    (reify
+      clojure.lang.IPersistentMap
+      (valAt [_ key]
+        (if-let [row-data (get table-data key)]
+          (if (valid-row-data? row-data)
+            (row database rdbms-table-key table-keys table-schema row-data))))
+      (entryAt [this key]
+        (if-let [val (.valAt this key)]
+          (clojure.lang.MapEntry. key val)))
+      (seq [this]
+        (->> (keys table-data)
+             (keep #(.entryAt this %))
+             (not-empty)))
+      (assoc [_ key val]
+        (assert (or (= (:key val) nil) (= (:key val) key)) "changing key is not supported.")
+        (if (:key val)
+          (table database rdbms-table-key table-keys table-schema (assoc table-data key (get-data val)) :changes (merge-changes changes (get-changes val)))  ; TODO: table-dataにもchangesをマージする。
+          (let [val (assoc (reduce-kv #(apply assoc
+                                         %1 (cond-> [%2 %3]
+                                              (contains? many-to-one-relationships %2) ((fn [[relationship-key row]]
+                                                                                          [(many-to-one-relationship-key-to-physical-column-key relationship-key) (:key row)]))))
+                                      {}
+                                      val)
+                           :key         key
+                           :type        (name (first table-keys))
+                           :--inserted? (not (contains? table-data key))
+                           :--modified? true)]
+            (table database rdbms-table-key table-keys table-schema (assoc table-data key val) :changes (assoc-in changes [rdbms-table-key key] val)))))
+      (without [this key]
+        (if (.valAt this key)
+          (table database rdbms-table-key table-keys table-schema (dissoc table-data key) :changes (update-in changes [rdbms-table-key key] #(assoc % :--deleted? true, :--modified true)))
+          this))
+      (count [_]
+        (->> (vals table-data)
+             (filter valid-row-data?)
+             (count)))
+      (iterator [this]
+        (.iterator (or (seq this) {})))
+      IDataHolder
+      (get-data [_]
+        table-data)
+      IDatabaseElement
+      (get-changes [_]
+        changes))))
 
 (defprotocol IDatabase
   "The database in memory."
@@ -271,7 +278,7 @@
     (reify
       clojure.lang.IPersistentMap
       (valAt [this key]
-        (table this key (get database-schema key) (get database-data key)))
+        (table this (rdbms-table-key database-schema key) (sub-table-keys database-schema key) (merge-super-table-schemas database-schema key) (get database-data (rdbms-table-key database-schema key))))
       (entryAt [this key]
         (clojure.lang.MapEntry. key (.valAt this key)))
       (seq [this]
