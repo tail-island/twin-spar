@@ -379,7 +379,9 @@
     ;; (pprint (ts-database-data transaction :software-products))
     ;; (pprint (ts-database-data transaction :software-products ($= :operating-system.name "operating-system 0")))
     ;; (pprint (ts-database-data transaction :programmers ($= :name "employee 3")))
-    ;; (pprint (ts-database-data transaction :composite-products))
+    (pprint (ts-database-data transaction :software-products))
+    (pprint (ts-database-data transaction :hardware-products))
+    (pprint (ts-database-data transaction :composite-products))
     ))
 
 ;; TODO: 削除のテストを追加する！
