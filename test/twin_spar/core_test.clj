@@ -22,7 +22,7 @@
    :charges                        {:many-to-one-relationships {:product                        {:table-key :products}
                                                                 :employee                       {:table-key :employees}}}
    :composite-products-to-products {:many-to-one-relationships {:composite-product              {:table-key :composite-products}
-                                                                :prouct                         {:table-key :products}}}
+                                                                :product                        {:table-key :products}}}
    :products                       {:columns                   {:name                           {:type      :string}
                                                                 :price                          {:type      :decimal,       :precision 10, :scale 2}}
                                     :many-to-one-relationships {:category                       {:table-key :categories}}
@@ -49,6 +49,8 @@
                                     :one-to-many-relationships {:subordinates                   {:table-key :employees,                      :many-to-one-relationship-key :superior}
                                                                 :tutees                         {:table-key :employees,                      :many-to-one-relationship-key :tutor}
                                                                 :charges                        {:table-key :charges,                        :many-to-one-relationship-key :employee}}}
+   :programmers                    {:super-table-key           :employees
+                                    :columns                   {:favorite-language              {:type      :string}}}
    :categories                     {:columns                   {:name                           {:type      :string}}
                                     :many-to-one-relationships {:superior-category              {:table-key :categories}}
                                     :one-to-many-relationships {:inferior-categories            {:table-key :categories,                     :many-to-one-relationship-key :superior-category}
@@ -100,11 +102,11 @@
                                       {:key (row-key 112), :name "customer 2", :superior-category-key (row-key 110), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :employees
-                                      {:key (row-key 120), :name "employee 0", :superior-key nil,           :tutor-key (row-key 124), :organization-key (row-key 100), :modified-at default-modified-at}
-                                      {:key (row-key 121), :name "employee 1", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
-                                      {:key (row-key 122), :name "employee 2", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 102), :modified-at default-modified-at}
-                                      {:key (row-key 123), :name "employee 3", :superior-key (row-key 121), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
-                                      {:key (row-key 124), :name "employee 4", :superior-key (row-key 121), :tutor-key nil,           :organization-key (row-key 101), :modified-at default-modified-at}
+                                      {:key (row-key 120), :type "employees",   :name "employee 0", :superior-key nil,           :tutor-key (row-key 124), :organization-key (row-key 100), :modified-at default-modified-at}
+                                      {:key (row-key 121), :type "employees",   :name "employee 1", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
+                                      {:key (row-key 122), :type "programmers", :name "employee 2", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 102), :modified-at default-modified-at}
+                                      {:key (row-key 123), :type "programmers", :name "employee 3", :superior-key (row-key 121), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
+                                      {:key (row-key 124), :type "programmers", :name "employee 4", :superior-key (row-key 121), :tutor-key nil,           :organization-key (row-key 101), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :customers
                                       {:key (row-key 130), :name "customer 0", :vip? true,  :modified-at default-modified-at}
@@ -126,7 +128,8 @@
                                       {:key (row-key 154), :type "composite-products",         :name "product 4", :price 5000, :category-key (row-key 112),                                                                                          :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :composite-products-to-products
-                                      {:key (row-key 160)}
+                                      {:key (row-key 160), :composite-product-key (row-key 154), :product-key (row-key 151), :modified-at default-modified-at}
+                                      {:key (row-key 161), :composite-product-key (row-key 154), :product-key (row-key 153), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :charges
                                       {:key (row-key 170), :product-key (row-key 150), :employee-key (row-key 123), :modified-at default-modified-at}
@@ -369,6 +372,15 @@
              (get-in database [:employees (row-key 126) :name])))
       (is (= "employee 2"
              (get-in database [:employees (row-key 126) :superior :name]))))))
+
+(deftest sti-test
+  (jdbc/with-db-transaction [transaction database-spec]
+    ;; (pprint (ts-database-data transaction :programmers))
+    ;; (pprint (ts-database-data transaction :software-products))
+    ;; (pprint (ts-database-data transaction :software-products ($= :operating-system.name "operating-system 0")))
+    ;; (pprint (ts-database-data transaction :programmers ($= :name "employee 3")))
+    ;; (pprint (ts-database-data transaction :composite-products))
+    ))
 
 ;; TODO: 削除のテストを追加する！
 
