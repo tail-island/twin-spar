@@ -21,6 +21,8 @@
                                                                 :customer                       {:table-key :customers}}}
    :charges                        {:many-to-one-relationships {:product                        {:table-key :products}
                                                                 :employee                       {:table-key :employees}}}
+   :composite-products-to-products {:many-to-one-relationships {:composite-product              {:table-key :composite-products}
+                                                                :prouct                         {:table-key :products}}}
    :products                       {:columns                   {:name                           {:type      :string}
                                                                 :price                          {:type      :decimal,       :precision 10, :scale 2}}
                                     :many-to-one-relationships {:category                       {:table-key :categories}}
@@ -28,16 +30,14 @@
                                                                 :order-details                  {:table-key :order-details, :many-to-one-relationship-key :product}
                                                                 :favorites                      {:table-key :favorites,     :many-to-one-relationship-key :product}}}
    :software-products              {:super-table-key           :products
-                                    :many-to-one-relationships {:os                             {:table-key :os}}}
+                                    :many-to-one-relationships {:operating-system               {:table-key :operating-systems}}}
    :download-software-products     {:super-table-key           :software-products
                                     :columns                   {:uri                            {:type      :string}}}
    :hardware-products              {:super-table-key           :products
                                     :columns                   {:size                           {:type      :string}}}
    :composite-products             {:super-table-key           :products
                                     :one-to-many-relationships {:composite-products-to-products {:table-key :composite-products-to-products, :many-to-one-relationship-key :composite-product}}}
-   :os                             {:columns                   {:name                           {:type      :string}}}
-   :composite-products-to-products {:many-to-one-relationships {:composite-product              {:table-key :composite-products}
-                                                                :prouct                         {:table-key :products}}}
+   :operating-systems              {:columns                   {:name                           {:type      :string}}}
    :customers                      {:columns                   {:name                           {:type      :string}
                                                                 :vip?                           {:type      :boolean}}
                                     :one-to-many-relationships {:orders                         {:table-key :orders,                         :many-to-one-relationship-key :customer}
@@ -90,55 +90,63 @@
                       (create-tables database-schema database-spec)
                       (jdbc/with-db-transaction [transaction database-spec]
                         (jdbc/insert! transaction :organizations
-                                      {:key (row-key 10), :name "o0", :superior-organization-key nil,          :modified-at default-modified-at}
-                                      {:key (row-key 11), :name "o1", :superior-organization-key (row-key 10), :modified-at default-modified-at}
-                                      {:key (row-key 12), :name "o2", :superior-organization-key (row-key 10), :modified-at default-modified-at}
+                                      {:key (row-key 100), :name "organization 0", :superior-organization-key nil,           :modified-at default-modified-at}
+                                      {:key (row-key 101), :name "organization 1", :superior-organization-key (row-key 100), :modified-at default-modified-at}
+                                      {:key (row-key 102), :name "organization 2", :superior-organization-key (row-key 100), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :categories
-                                      {:key (row-key 20), :name "c0", :superior-category-key nil,          :modified-at default-modified-at}
-                                      {:key (row-key 21), :name "c1", :superior-category-key (row-key 20), :modified-at default-modified-at}
-                                      {:key (row-key 22), :name "c2", :superior-category-key (row-key 20), :modified-at default-modified-at}
+                                      {:key (row-key 110), :name "customer 0", :superior-category-key nil,           :modified-at default-modified-at}
+                                      {:key (row-key 111), :name "customer 1", :superior-category-key (row-key 110), :modified-at default-modified-at}
+                                      {:key (row-key 112), :name "customer 2", :superior-category-key (row-key 110), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :employees
-                                      {:key (row-key 30), :name "e0", :superior-key nil,          :tutor-key (row-key 34), :organization-key (row-key 10), :modified-at default-modified-at}
-                                      {:key (row-key 31), :name "e1", :superior-key (row-key 30), :tutor-key (row-key 34), :organization-key (row-key 11), :modified-at default-modified-at}
-                                      {:key (row-key 32), :name "e2", :superior-key (row-key 30), :tutor-key (row-key 34), :organization-key (row-key 12), :modified-at default-modified-at}
-                                      {:key (row-key 33), :name "e3", :superior-key (row-key 31), :tutor-key (row-key 34), :organization-key (row-key 11), :modified-at default-modified-at}
-                                      {:key (row-key 34), :name "e4", :superior-key (row-key 31), :tutor-key nil,          :organization-key (row-key 11), :modified-at default-modified-at}
+                                      {:key (row-key 120), :name "employee 0", :superior-key nil,           :tutor-key (row-key 124), :organization-key (row-key 100), :modified-at default-modified-at}
+                                      {:key (row-key 121), :name "employee 1", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
+                                      {:key (row-key 122), :name "employee 2", :superior-key (row-key 120), :tutor-key (row-key 124), :organization-key (row-key 102), :modified-at default-modified-at}
+                                      {:key (row-key 123), :name "employee 3", :superior-key (row-key 121), :tutor-key (row-key 124), :organization-key (row-key 101), :modified-at default-modified-at}
+                                      {:key (row-key 124), :name "employee 4", :superior-key (row-key 121), :tutor-key nil,           :organization-key (row-key 101), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :customers
-                                      {:key (row-key 40), :name "c0", :vip? true,  :modified-at default-modified-at}
-                                      {:key (row-key 41), :name "c1", :vip? false, :modified-at default-modified-at}
-                                      {:key (row-key 42), :name "c2", :vip? true,  :modified-at default-modified-at}
-                                      {:key (row-key 43), :name "c3", :vip? false, :modified-at default-modified-at}
-                                      {:key (row-key 44), :name "c4", :vip? true,  :modified-at default-modified-at}
+                                      {:key (row-key 130), :name "customer 0", :vip? true,  :modified-at default-modified-at}
+                                      {:key (row-key 131), :name "customer 1", :vip? false, :modified-at default-modified-at}
+                                      {:key (row-key 132), :name "customer 2", :vip? true,  :modified-at default-modified-at}
+                                      {:key (row-key 133), :name "customer 3", :vip? false, :modified-at default-modified-at}
+                                      {:key (row-key 134), :name "customer 4", :vip? true,  :modified-at default-modified-at}
+                                      :entities (jdbc/quoted \"))
+                        (jdbc/insert! transaction :operating-systems
+                                      {:key (row-key 140), :name "operating-system 0"}
+                                      {:key (row-key 141), :name "operating-system 1"}
+                                      {:key (row-key 142), :name "operating-system 2"}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :products
-                                      {:key (row-key 50), :name "p0", :price 1000, :category-key (row-key 20), :modified-at default-modified-at}
-                                      {:key (row-key 51), :name "p1", :price 2000, :category-key (row-key 21), :modified-at default-modified-at}
-                                      {:key (row-key 52), :name "p2", :price 3000, :category-key (row-key 21), :modified-at default-modified-at}
-                                      {:key (row-key 53), :name "p3", :price 4000, :category-key (row-key 22), :modified-at default-modified-at}
-                                      {:key (row-key 54), :name "p4", :price 5000, :category-key (row-key 22), :modified-at default-modified-at}
+                                      {:key (row-key 150), :type "software-products",          :name "product 0", :price 1000, :category-key (row-key 110), :operating-system-key (row-key 140),                                                     :modified-at default-modified-at}
+                                      {:key (row-key 151), :type "software-products",          :name "product 1", :price 2000, :category-key (row-key 111), :operating-system-key (row-key 141),                                                     :modified-at default-modified-at}
+                                      {:key (row-key 152), :type "download-software-products", :name "product 2", :price 3000, :category-key (row-key 111), :operating-system-key (row-key 142), :uri "http://tail-island.com",                      :modified-at default-modified-at}
+                                      {:key (row-key 153), :type "hardware-products",          :name "product 3", :price 4000, :category-key (row-key 112),                                                                     :size "100x200 1kg", :modified-at default-modified-at}
+                                      {:key (row-key 154), :type "composite-products",         :name "product 4", :price 5000, :category-key (row-key 112),                                                                                          :modified-at default-modified-at}
+                                      :entities (jdbc/quoted \"))
+                        (jdbc/insert! transaction :composite-products-to-products
+                                      {:key (row-key 160)}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :charges
-                                      {:key (row-key 60), :product-key (row-key 50), :employee-key (row-key 33), :modified-at default-modified-at}
-                                      {:key (row-key 61), :product-key (row-key 51), :employee-key (row-key 33), :modified-at default-modified-at}
-                                      {:key (row-key 62), :product-key (row-key 52), :employee-key (row-key 33), :modified-at default-modified-at}
-                                      {:key (row-key 63), :product-key (row-key 53), :employee-key (row-key 34), :modified-at default-modified-at}
-                                      {:key (row-key 64), :product-key (row-key 54), :employee-key (row-key 34), :modified-at default-modified-at}
+                                      {:key (row-key 170), :product-key (row-key 150), :employee-key (row-key 123), :modified-at default-modified-at}
+                                      {:key (row-key 171), :product-key (row-key 151), :employee-key (row-key 123), :modified-at default-modified-at}
+                                      {:key (row-key 172), :product-key (row-key 152), :employee-key (row-key 123), :modified-at default-modified-at}
+                                      {:key (row-key 173), :product-key (row-key 153), :employee-key (row-key 124), :modified-at default-modified-at}
+                                      {:key (row-key 174), :product-key (row-key 154), :employee-key (row-key 124), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :favorites
-                                      {:key (row-key 70), :product-key (row-key 50), :customer-key (row-key 40), :modified-at default-modified-at}
-                                      {:key (row-key 71), :product-key (row-key 51), :customer-key (row-key 41), :modified-at default-modified-at}
+                                      {:key (row-key 180), :product-key (row-key 150), :customer-key (row-key 130), :modified-at default-modified-at}
+                                      {:key (row-key 181), :product-key (row-key 151), :customer-key (row-key 131), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :orders
-                                      {:key (row-key 80), :at default-modified-at, :customer-key (row-key 42), :modified-at default-modified-at}
-                                      {:key (row-key 81), :at (time.coerce/from-date #inst "2015-01-01T00:00:01+09:00"), :customer-key (row-key 43), :modified-at default-modified-at}
+                                      {:key (row-key 190), :at (time.coerce/from-date #inst "2015-01-02T00:00:00+09:00")  :customer-key (row-key 132), :modified-at default-modified-at}
+                                      {:key (row-key 191), :at (time.coerce/from-date #inst "2015-01-02T00:00:01+09:00"), :customer-key (row-key 133), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \"))
                         (jdbc/insert! transaction :order-details
-                                      {:key (row-key 90), :quantity 10, :order-key (row-key 80), :product-key (row-key 52), :modified-at default-modified-at}
-                                      {:key (row-key 91), :quantity 11, :order-key (row-key 80), :product-key (row-key 53), :modified-at default-modified-at}
-                                      {:key (row-key 92), :quantity 12, :order-key (row-key 81), :product-key (row-key 54), :modified-at default-modified-at}
+                                      {:key (row-key 190), :quantity 10, :order-key (row-key 190), :product-key (row-key 152), :modified-at default-modified-at}
+                                      {:key (row-key 191), :quantity 11, :order-key (row-key 190), :product-key (row-key 153), :modified-at default-modified-at}
+                                      {:key (row-key 192), :quantity 12, :order-key (row-key 191), :product-key (row-key 154), :modified-at default-modified-at}
                                       :entities (jdbc/quoted \")))
                       (test-function)))
 
@@ -146,205 +154,254 @@
   (let [database (ts-database (jdbc/with-db-transaction [transaction database-spec]
                                 (reduce #(merge-rows-to-database-data %1 %2 (jdbc/query transaction [(format "SELECT * FROM %s" (#'twin-spar.core/sql-name %2))]))
                                         {}
-                                        [:organizations :employees :categories :products :charges :orders :order-details])))]
+                                        [:organizations :categories :employees :customers :operating-systems :products :composite-products-to-products :charges :favorites :orders :order-details])))]
     
     (testing "reading values"
-      (is (= "e0" (get-in database [:employees (row-key 30) :name])))
-      (is (= "e0" (get-in database [:employees (row-key 31) :superior :name])))
-      (is (= "e0" (get-in database [:employees (row-key 33) :superior :superior :name])))
-      (is (= ["e1" "e2"]
-             (sort (map :name (get-in database [:employees (row-key 30) :subordinates])))))
-      (is (= "o0" (get-in database [:employees (row-key 30) :organization :name])))
-      (is (= ["e0"]
-             (sort (map :name (get-in database [:organizations (row-key 10) :employees]))))))
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 120) :name])))
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 121) :superior :name])))
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 123) :superior :superior :name])))
+      (is (= ["employee 1" "employee 2"]
+             (sort (map :name (get-in database [:employees (row-key 120) :subordinates])))))
+      (is (= "organization 0"
+             (get-in database [:employees (row-key 120) :organization :name])))
+      (is (= ["employee 0"]
+             (sort (map :name (get-in database [:organizations (row-key 100) :employees]))))))
     
     (testing "writing values"
       (let [database (-> database
-                         (assoc-in  [:products (row-key 50) :name]  "P0")
-                         (assoc-in  [:products (row-key 50) :price] 1001)
-                         (update-in [:products (row-key 51)]        #(assoc % :name "P1" :price 2001)))]
-        (is (= "P0" (get-in database [:products (row-key 50) :name])))
-        (is (= 1001 (get-in database [:products (row-key 50) :price])))
-        (is (= "P1" (get-in database [:products (row-key 51) :name])))
-        (is (= 2001 (get-in database [:products (row-key 51) :price])))
-        (is (= "p2" (get-in database [:products (row-key 52) :name]))))
-      (is (= "p0" (get-in database [:products (row-key 50) :name])))
+                         (assoc-in  [:products (row-key 150) :name]  "PRODUCT 0")
+                         (assoc-in  [:products (row-key 150) :price] 1001)
+                         (update-in [:products (row-key 151)]        #(assoc % :name "PRODUCT 1" :price 2001)))]
+        (is (= "PRODUCT 0"
+               (get-in database [:products (row-key 150) :name])))
+        (is (= 1001
+               (get-in database [:products (row-key 150) :price])))
+        (is (= "PRODUCT 1"
+               (get-in database [:products (row-key 151) :name])))
+        (is (= 2001
+               (get-in database [:products (row-key 151) :price])))
+        (is (= "product 2"
+               (get-in database [:products (row-key 152) :name]))))
+      (is (= "product 0"
+             (get-in database [:products (row-key 150) :name])))
 
-      (let [database (assoc-in database [:employees (row-key 31) :superior :name] "E0")]
-        (is (= "E0"
-               (get-in database [:employees (row-key 31) :superior :name])
-               (get-in database [:employees (row-key 30) :name]))))
+      (let [database (assoc-in database [:employees (row-key 121) :superior :name] "EMPLOYEE 1")]
+        (is (= "EMPLOYEE 1"
+               (get-in database [:employees (row-key 121) :superior :name])
+               (get-in database [:employees (row-key 120) :name]))))
       
-      (let [database (assoc-in database [:employees (row-key 30) :organization :name] "O0")]
-        (is (= "O0"
-               (get-in database [:employees (row-key 30) :organization :name])
-               (get-in database [:organizations (row-key 10) :name]))))
+      (let [database (assoc-in database [:employees (row-key 120) :organization :name] "ORGANIZATION 0")]
+        (is (= "ORGANIZATION 0"
+               (get-in database [:employees (row-key 120) :organization :name])
+               (get-in database [:organizations (row-key 100) :name]))))
       
       (let [database (-> database
-                         (dissoc-in [:employees     (row-key 30)])  ; この操作は、参照整合性を壊します。実際のアプリケーションでは、参照整合性を壊さないように更新してください。
-                         (dissoc-in [:organizations (row-key 10)])
-                         (dissoc-in [:organizations (row-key 11)]))]
+                         (dissoc-in [:employees     (row-key 120)])  ; この操作は、参照整合性を壊します。実際のアプリケーションでは、参照整合性を壊さないように更新してください。
+                         (dissoc-in [:organizations (row-key 100)])
+                         (dissoc-in [:organizations (row-key 101)]))]
         
-        (is (nil?      (get-in database [:employees     (row-key 30)])))
-        (is (not (nil? (get-in database [:employees     (row-key 31)]))))
-        (is (nil?      (get-in database [:organizations (row-key 10)])))
-        (is (nil?      (get-in database [:organizations (row-key 11)])))
-        (is (not (nil? (get-in database [:organizations (row-key 12)]))))
-
-        (is (nil? (some #(= % (row-key 30)) (keys (get-in database [:employees])))))
-        (is (nil? (some #(= % (row-key 10)) (keys (get-in database [:organizations])))))
-        (is (nil? (some #(= % (row-key 11)) (keys (get-in database [:organizations]))))))
+        (is (nil?      (get-in database [:employees     (row-key 120)])))
+        (is (not (nil? (get-in database [:employees     (row-key 121)]))))
+        (is (nil?      (get-in database [:organizations (row-key 100)])))
+        (is (nil?      (get-in database [:organizations (row-key 101)])))
+        (is (not (nil? (get-in database [:organizations (row-key 102)]))))
+        
+        (is (nil? (some #(= % (row-key 120)) (keys (get-in database [:employees])))))
+        (is (nil? (some #(= % (row-key 100)) (keys (get-in database [:organizations])))))
+        (is (nil? (some #(= % (row-key 101)) (keys (get-in database [:organizations]))))))
       
       ;; one-to-many-relationshipは更新できません（relationshipが切れてしまうrowが発生してしまうため）。以下のようなコードで更新してください。
-      (let [subordinates (->> (get-in database [:employees (row-key 31) :subordinates])
+      (let [subordinates (->> (get-in database [:employees (row-key 121) :subordinates])
                               (map #(update-in % [:name] string/upper-case)))
-            tutees       (->> (get-in database [:employees (row-key 34) :tutees])
+            tutees       (->> (get-in database [:employees (row-key 124) :tutees])
                               (map #(update-in % [:name] string/upper-case)))
             database     (update-in database [:employees] #(reduce (fn [result subordinate]
                                                                      (assoc result (:key subordinate) subordinate))
                                                                    %
                                                                    subordinates))]
-        (is (= "E3" (get-in database [:employees (row-key 33) :name])))
-        (is (= "E4" (get-in database [:employees (row-key 34) :name])))
-        (is (= "e2" (get-in database [:employees (row-key 32) :name]))))  ; tuteesの変更結果はdatabaseにassocしていませんから、変更は反省されません。
+        (is (= "EMPLOYEE 3"
+               (get-in database [:employees (row-key 123) :name])))
+        (is (= "EMPLOYEE 4"
+               (get-in database [:employees (row-key 124) :name])))
+        (is (= "employee 2"
+               (get-in database [:employees (row-key 122) :name]))))  ; tuteesの変更結果はdatabaseにassocしていませんから、変更は反省されません。
       
       ;; relationshipの変更は、databaseまで戻らないと反映されません（mapの場合と同じ動作です）。
-      (let [employee (assoc-in (:employees database) [(row-key 31) :superior :name] "E0")]
-        (is (= "e0"  ; NOT "E0"
-               (get-in database [:employees (row-key 31) :superior :name])
-               (get-in database [:employees (row-key 30) :name])))))))
+      (let [employee (assoc-in (:employees database) [(row-key 121) :superior :name] "EMPLOYEE 0")]
+        (is (= "employee 0"  ; NOT "EMPLOYEE 0"
+               (get-in database [:employees (row-key 121) :superior :name])
+               (get-in database [:employees (row-key 120) :name])))))
 
-  (deftest reading-test
-    (jdbc/with-db-transaction [transaction database-spec]
-      ;; (pprint (ts-database-data transaction :products))
-      ;; (pprint (ts-database-data transaction :products ($in :charges.employee.tutees.superior.key [(row-key 30) (row-key 31)])))
-      ;; (pprint (ts-database-data transaction :products ($is :name nil)))
-      ;; (pprint (ts-database-data transaction :products ($not ($is :name nil))))
-      ;; (pprint (ts-database-data transaction :orders ($<= :at (time.coerce/from-date #inst "2015-01-01T00:00:01+09:00")))) 
-      (let [database (ts-database (ts-database-data transaction :employees ($= :name "e1")))]
-        (is (= "e1" (get-in database [:employees (row-key 31) :name])))
-        (is (= "e0" (get-in database [:employees (row-key 31) :superior :name])))
-        (is (= "o0" (get-in database [:employees (row-key 31) :superior :organization :name])))
-        (is (= ["e3" "e4"]
-               (sort (map :name (get-in database [:employees (row-key 31) :subordinates])))))
-        (is (empty? (-> (->> (-> database  ; 子を取得するのは、対象テーブルのみです。だから、データベース上にデータがあっても、空になります。
-                                 (get-in [:employees (row-key 31) :subordinates]))
-                             (sort-by :name)
-                             (first))
-                        (get-in [:charges]))))
-        (is (= "e4"  ; 子の親は、再帰的に辿って取得されます。
-               (-> (->> (-> database
-                            (get-in [:employees (row-key 31) :subordinates]))
-                        (sort-by :name)
-                        (first))
-                   (get-in [:tutor :name]))))
-        (is (= ["e1"]  ; 親の子は取得されないので、対象そのもののe1だけが取得でき、e2は取得できません。
-               (sort (map :name (get-in database [:employees (row-key 31) :superior :subordinates]))))))
-      (let [database (ts-database (->> (ts-database-data transaction :customers ($= :name "c0"))
-                                       (ts-database-data transaction :customers ($= :name "c1"))))]
-        (is (= "c0" (get-in database [:customers (row-key 40) :name])))
-        (is (= "c1" (get-in database [:customers (row-key 41) :name])))
-        (is (nil?   (get-in database [:customers (row-key 42) :name]))))
-      (let [database (ts-database (ts-database-data transaction :products ($or ($= :favorites.customer.name "c1")
-                                                                               :order-details.order.customer.vip?)))]
-        (is (= ["p1" "p2" "p3"]  ; customer c1 -> favorites p1, customer c2(vip) -> ordered p2 and p3, customer c3(NOT vip) -> ordered p4.
-               (sort (map :name (vals (get-in database [:products])))))))
-      (let [database (ts-database (ts-database-data transaction :employees ($or ($= :name "e1") ($= :name "e2"))))]
-        (is (= ["e1" "e2"]
-               (sort (map :name (get-condition-matched-rows database :employees)))))
-        (is (= ["e0" "e1" "e2" "e3" "e4"]
-               (sort (map :name (vals (:employees database)))))))))
+    (testing "single table inheritance"
+      (is (= ["product 0" "product 1" "product 2"]
+             (sort (map :name (vals (get-in database [:software-products]))))))
+      (is (= "software-products"
+             (-> database
+                 (assoc-in [:software-products (row-key 155)] {:name "product 5", :price 6000, :category-key (row-key 110), :operating-system-key (row-key 140)})
+                 (get-in   [:software-products (row-key 155) :type]))))
+      (is (= "http://tail-island.com"
+             (get-in database [:download-software-products (row-key 152) :uri])))
+      (is (= "http://tail-island.com"
+             (get-in database [:software-products          (row-key 152) :uri])))             ; カラムへのアクセスに特別な制限をかけていないので、値が取れてしまいます。
+      (is (= "operating-system 0"
+             (get-in database [:software-products (row-key 150) :operating-system :name])))
+      (is (= nil
+             (get-in database [:products          (row-key 150) :operating-system :name])))   ; ただし、リレーションシップは別。リレーションシップ向けの特別な処理が動かないためです。
+      (is (= (row-key 140)
+             (get-in database [:products          (row-key 150) :operating-system-key]))))))  ; キーは、カラム同様に値を取れてしまいます。
 
-  (deftest writing-test
-    (jdbc/with-db-transaction [transaction database-spec]
-      (let [database (ts-database (ts-database-data transaction :employees))]
-        (is (= "e0" (get-in database [:employees (row-key 30) :name])))
-        (is (= "e0" (get-in database [:employees (row-key 32) :superior :name])))))
-    (jdbc/with-db-transaction [transaction database-spec]
-      (let [database (ts-database (ts-database-data transaction :employees))]
-        (-> database
-            (assoc-in [:employees (row-key 30) :name]     "E0")
-            (assoc-in [:employees (row-key 32) :superior] (get-in database [:employees (row-key 31)]))
-            (assoc-in [:employees (row-key 33)] {:name             "E3"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
-                                                 :superior-key     (row-key 32)
-                                                 :tutor-key        (row-key 34)
-                                                 :organization-key (row-key 12)})
-            (assoc-in [:employees (row-key 34)] {:name             "E4"
-                                                 :superior         (get-in database [:employees     (row-key 32)])
-                                                 :tutor            nil
-                                                 :organization     (get-in database [:organizations (row-key 12)])})
-            (assoc-in [:employees (row-key 35)] {:name             "e5"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
-                                                 :superior         (get-in database [:employees     (row-key 32)])
-                                                 :tutor            (get-in database [:employees     (row-key 31)])
-                                                 :organization     (get-in database [:organizations (row-key 12)])})
-            (assoc-in [:employees (row-key 36)] {:name             "e6"
-                                                 :superior-key     (row-key 32)
-                                                 :tutor-key        (row-key 31)
-                                                 :organization-key (row-key 12)})
-            (ts-save! transaction))))
-    (jdbc/with-db-transaction [transaction database-spec]
-      (let [database (ts-database (ts-database-data transaction :employees))]
-        (is (= "E0" (get-in database [:employees (row-key 30) :name])))
-        (is (= "e1" (get-in database [:employees (row-key 32) :superior :name])))
-        (is (= "E3" (get-in database [:employees (row-key 33) :name])))
-        (is (= "e2" (get-in database [:employees (row-key 33) :superior :name])))
-        (is (= "E4" (get-in database [:employees (row-key 34) :name])))
-        (is (= "e2" (get-in database [:employees (row-key 34) :superior :name])))
-        (is (= "e5" (get-in database [:employees (row-key 35) :name])))
-        (is (= "e2" (get-in database [:employees (row-key 35) :superior :name])))
-        (is (= "e6" (get-in database [:employees (row-key 36) :name])))
-        (is (= "e2" (get-in database [:employees (row-key 36) :superior :name]))))))
+(deftest reading-test
+  (jdbc/with-db-transaction [transaction database-spec]
+    ;; (pprint (ts-database-data transaction :products))
+    ;; (pprint (ts-database-data transaction :products ($in :charges.employee.tutees.superior.key [(row-key 120) (row-key 121)])))
+    ;; (pprint (ts-database-data transaction :products ($is :name nil)))
+    ;; (pprint (ts-database-data transaction :products ($not ($is :name nil))))
+    ;; (pprint (ts-database-data transaction :orders ($<= :at (time.coerce/from-date #inst "2015-01-02T00:00:01+09:00")))) 
+    (let [database (ts-database (ts-database-data transaction :employees ($= :name "employee 1")))]
+      (is (= "employee 1"
+             (get-in database [:employees (row-key 121) :name])))
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 121) :superior :name])))
+      (is (= "organization 0"
+             (get-in database [:employees (row-key 121) :superior :organization :name])))
+      (is (= ["employee 3" "employee 4"]
+             (sort (map :name (get-in database [:employees (row-key 121) :subordinates])))))
+      (is (empty? (-> (->> (-> database  ; 子を取得するのは、対象テーブルのみです。だから、データベース上にデータがあっても、空になります。
+                               (get-in [:employees (row-key 121) :subordinates]))
+                           (sort-by :name)
+                           (first))
+                      (get-in [:charges]))))
+      (is (= "employee 4"  ; 子の親は、再帰的に辿って取得されます。
+             (-> (->> (-> database
+                          (get-in [:employees (row-key 121) :subordinates]))
+                      (sort-by :name)
+                      (first))
+                 (get-in [:tutor :name]))))
+      (is (= ["employee 1"]  ; 親の子は取得されないので、対象そのもののe1だけが取得でき、e2は取得できません。
+             (sort (map :name (get-in database [:employees (row-key 121) :superior :subordinates]))))))
+    (let [database (ts-database (->> (ts-database-data transaction :customers ($= :name "customer 0"))
+                                     (ts-database-data transaction :customers ($= :name "customer 1"))))]
+      (is (= "customer 0"
+             (get-in database [:customers (row-key 130) :name])))
+      (is (= "customer 1"
+             (get-in database [:customers (row-key 131) :name])))
+      (is (= nil
+             (get-in database [:customers (row-key 132) :name]))))
+    (let [database (ts-database (ts-database-data transaction :products ($or ($= :favorites.customer.name "customer 1")
+                                                                             :order-details.order.customer.vip?)))]
+      (is (= ["product 1" "product 2" "product 3"]  ; customer 1 -> favorites product 1, customer 2(vip) -> ordered product 2 and product 3, customer 3(NOT vip) -> ordered product 4.
+             (sort (map :name (vals (get-in database [:products])))))))
+    (let [database (ts-database (ts-database-data transaction :employees ($or ($= :name "employee 1") ($= :name "employee 2"))))]
+      (is (= ["employee 1" "employee 2"]
+             (sort (map :name (get-condition-matched-rows database :employees)))))
+      (is (= ["employee 0" "employee 1" "employee 2" "employee 3" "employee 4"]
+             (sort (map :name (vals (:employees database)))))))))
+
+(deftest writing-test
+  (jdbc/with-db-transaction [transaction database-spec]
+    (let [database (ts-database (ts-database-data transaction :employees))]
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 120) :name])))
+      (is (= "employee 0"
+             (get-in database [:employees (row-key 122) :superior :name])))))
+  (jdbc/with-db-transaction [transaction database-spec]
+    (let [database (ts-database (ts-database-data transaction :employees))]
+      (-> database
+          (assoc-in [:employees (row-key 120) :name]     "EMPLOYEE 0")
+          (assoc-in [:employees (row-key 122) :superior] (get-in database [:employees (row-key 121)]))
+          (assoc-in [:employees (row-key 123)] {:name             "EMPLOYEE 3"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
+                                                :superior-key     (row-key 122)
+                                                :tutor-key        (row-key 124)
+                                                :organization-key (row-key 102)})
+          (assoc-in [:employees (row-key 124)] {:name             "EMPLOYEE 4"
+                                                :superior         (get-in database [:employees     (row-key 122)])
+                                                :tutor            nil
+                                                :organization     (get-in database [:organizations (row-key 102)])})
+          (assoc-in [:employees (row-key 125)] {:name             "employee 5"  ; 実際のコードでは、row-keyではなくnew-keyを使用してください。
+                                                :superior         (get-in database [:employees     (row-key 122)])
+                                                :tutor            (get-in database [:employees     (row-key 121)])
+                                                :organization     (get-in database [:organizations (row-key 102)])})
+          (assoc-in [:employees (row-key 126)] {:name             "employee 6"
+                                                :superior-key     (row-key 122)
+                                                :tutor-key        (row-key 121)
+                                                :organization-key (row-key 102)})
+          (ts-save! transaction))))
+  (jdbc/with-db-transaction [transaction database-spec]
+    (let [database (ts-database (ts-database-data transaction :employees))]
+      (is (= "EMPLOYEE 0"
+             (get-in database [:employees (row-key 120) :name])))
+      (is (= "employee 1"
+             (get-in database [:employees (row-key 122) :superior :name])))
+      (is (= "EMPLOYEE 3"
+             (get-in database [:employees (row-key 123) :name])))
+      (is (= "employee 2"
+             (get-in database [:employees (row-key 123) :superior :name])))
+      (is (= "EMPLOYEE 4"
+             (get-in database [:employees (row-key 124) :name])))
+      (is (= "employee 2"
+             (get-in database [:employees (row-key 124) :superior :name])))
+      (is (= "employee 5"
+             (get-in database [:employees (row-key 125) :name])))
+      (is (= "employee 2"
+             (get-in database [:employees (row-key 125) :superior :name])))
+      (is (= "employee 6"
+             (get-in database [:employees (row-key 126) :name])))
+      (is (= "employee 2"
+             (get-in database [:employees (row-key 126) :superior :name]))))))
 
 ;; TODO: 削除のテストを追加する！
 
-  ;; (deftest without-twin-spar-sample
-  ;;   (let [products   (jdbc/query database-spec ["SELECT *
-  ;;                                                FROM   \"products\"
-  ;;                                                WHERE  \"products\".\"price\" > ?"
-  ;;                                               1000])
-  ;;         categories (jdbc/query database-spec ["SELECT DISTINCT \"categories\".*
-  ;;                                                FROM   \"categories\"
-  ;;                                                JOIN   \"products\" ON \"products\".\"category-key\" = \"categories\".\"key\"
-  ;;                                                WHERE  \"products\".\"price\" > ?"
-  ;;                                               1000])]
-  
-  ;;     (let [product (first products)]
-  ;;       (println (:name product) (:name (some #(and (= (:key %) (:category-key product)) %)
-  ;;                                             categories))))
+;; (deftest without-twin-spar-sample
+;;   (let [products   (jdbc/query database-spec ["SELECT *
+;;                                                FROM   \"products\"
+;;                                                WHERE  \"products\".\"price\" > ?"
+;;                                               1000])
+;;         categories (jdbc/query database-spec ["SELECT DISTINCT \"categories\".*
+;;                                                FROM   \"categories\"
+;;                                                JOIN   \"products\" ON \"products\".\"category-key\" = \"categories\".\"key\"
+;;                                                WHERE  \"products\".\"price\" > ?"
+;;                                               1000])]
 
-  ;;     (let [product (first products)]
-  ;;       (->> (map #(cond-> %
-  ;;                    (= (:key %) (:category-key product)) (assoc :name "NEW Category"))
-  ;;                 categories)
-  ;;            (map :name)
-  ;;            (println)))
+;;     (let [product (first products)]
+;;       (println (:name product) (:name (some #(and (= (:key %) (:category-key product)) %)
+;;                                             categories))))
 
-  ;;     (let [product (assoc (first products) :name "XXX")]
-  ;;       (jdbc/update! database-spec :products product ["\"key\" = ?" (:key product)] :entities (jdbc/quoted \")))
-  ;;     )
+;;     (let [product (first products)]
+;;       (->> (map #(cond-> %
+;;                    (= (:key %) (:category-key product)) (assoc :name "NEW Category"))
+;;                 categories)
+;;            (map :name)
+;;            (println)))
 
-  ;;   (pprint (jdbc/query database-spec ["SELECT * FROM \"products\""])))
+;;     (let [product (assoc (first products) :name "XXX")]
+;;       (jdbc/update! database-spec :products product ["\"key\" = ?" (:key product)] :entities (jdbc/quoted \")))
+;;     )
 
-  ;; (deftest with-twin-spar-sample
-  ;;   (let [my-database ts-database
-  ;;         my-database-data ts-database-data
-  ;;         my-save! ts-save!]
-  
-  ;;     (let [database (my-database (my-database-data database-spec :products ($> :price 1000)))]
+;;   (pprint (jdbc/query database-spec ["SELECT * FROM \"products\""])))
 
-  ;;       (let [product (first (vals (:products database)))]
-  ;;         (println (:name product) (:name (:category product))))
-  
-  ;;       (let [product (first (vals (:products database)))]
-  ;;         (->> (assoc-in database [:products (:key product) :category :name] "NEW Category")
-  ;;              (:categories)
-  ;;              (vals)
-  ;;              (map :name)
-  ;;              (println)))
+;; (deftest with-twin-spar-sample
+;;   (let [my-database ts-database
+;;         my-database-data ts-database-data
+;;         my-save! ts-save!]
 
-  ;;       (let [product  (first (vals (:products database)))
-  ;;             database (assoc-in database [:products (:key product) :name] "XXX")]
-  ;;         (my-save! database database-spec))
-  ;;       )
+;;     (let [database (my-database (my-database-data database-spec :products ($> :price 1000)))]
 
-  ;;     (pprint (jdbc/query database-spec ["SELECT * FROM \"products\""]))))
+;;       (let [product (first (vals (:products database)))]
+;;         (println (:name product) (:name (:category product))))
+
+;;       (let [product (first (vals (:products database)))]
+;;         (->> (assoc-in database [:products (:key product) :category :name] "NEW Category")
+;;              (:categories)
+;;              (vals)
+;;              (map :name)
+;;              (println)))
+
+;;       (let [product  (first (vals (:products database)))
+;;             database (assoc-in database [:products (:key product) :name] "XXX")]
+;;         (my-save! database database-spec))
+;;       )
+
+;;     (pprint (jdbc/query database-spec ["SELECT * FROM \"products\""]))))
