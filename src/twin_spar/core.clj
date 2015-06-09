@@ -46,57 +46,71 @@
 
 ;; TODO: テスト！
 
-(defn- root-table-key
-  [database-schema table-key]
-  (if-let [super-table-key (get-in database-schema [table-key :super-table-key])]
-    (recur database-schema super-table-key)
-    table-key))
-
-(defn- sub-table-keys
-  [database-schema super-table-key]
-  (cons super-table-key (lazy-seq (->> database-schema
-                                       (keep (fn [[table-key table-schema]]
-                                               (if (= (:super-table-key table-schema) super-table-key)
-                                                 table-key)))
-                                       (map (partial sub-table-keys database-schema))
-                                       (apply concat)))))
-
 (defprotocol TableSchema
-  (merge-sub-table-schema [this sub-table-schema]))
+  (merge-super-table-schema [this super-table-schema]))
 
 (extend-protocol TableSchema
   clojure.lang.IPersistentMap
-  (merge-sub-table-schema [this sub-table-schema]  ; 順序を保証するために、ごめんなさい、分かりづらいコードになっています。
+  (merge-super-table-schema [this super-table-schema]  ; 順序を保証するために、ごめんなさい、分かりづらいコードになっています。
     (apply array-map (->> (reduce (fn [map [key value]]
-                                    (assoc map key (merge-sub-table-schema (get map key) value)))
+                                    (assoc map key (merge-super-table-schema value (get map key))))
                                   (array-map)
-                                  (concat this sub-table-schema))
+                                  (concat super-table-schema this))
                           (reverse)
                           (apply concat))))
   clojure.lang.IPersistentCollection
-  (merge-sub-table-schema [this sub-table-schema]
-    (vec (concat this sub-table-schema)))
+  (merge-super-table-schema [this super-table-schema]
+    (vec (concat super-table-schema this)))
   Object
-  (merge-sub-table-schema [this sub-table-schema]
-    sub-table-schema)
-  nil
-  (merge-sub-table-schema [this sub-table-schema]
-    sub-table-schema))
+  (merge-super-table-schema [this super-table-schema]
+    this))
+
+(def ^:private merge-sub-table-schema
+  (flip merge-super-table-schema))
+
+(defn- super-table-key
+  [database-schema table-key]
+  (get-in database-schema [table-key :super-table-key]))
+
+(defn- super-table-keys
+  [database-schema table-key]
+  (cons table-key (lazy-seq (if-let [super-table-key (super-table-key database-schema table-key)]
+                              (super-table-keys database-schema super-table-key)))))
+
+(defn- sub-table-keys
+  [database-schema table-key]
+  (cons table-key (lazy-seq (->> (keys database-schema)
+                                 (keep #(if-let [super-table-key (super-table-key database-schema %)]
+                                          (if (= super-table-key table-key)
+                                            (sub-table-keys database-schema %))))
+                                 (apply concat)))))
+
+(defn- merge-table-schemas
+  [table-keys-fn merge-table-schema-fn database-schema table-key]
+  (->> (table-keys-fn database-schema table-key)
+       (map (partial get database-schema))
+       (reduce merge-table-schema-fn)))
+
+(def ^:private merge-super-table-schemas
+  (partial merge-table-schemas super-table-keys merge-super-table-schema))
+
+(def ^:private merge-sub-table-schemas
+  (partial merge-table-schemas sub-table-keys   merge-sub-table-schema))
+
+(defn- rdbms-table-key
+  [database-schema table-key]
+  (->> (super-table-keys database-schema table-key)
+       (last)))
 
 (defn- rdbms-database-schema
   [database-schema]
-  (letfn [(merge-sub-table-schemas [super-table-key super-table-schema]
-            (->> database-schema
-                 (reduce-kv #(cond-> %1
-                               (= (:super-table-key %3) super-table-key) (merge-sub-table-schema (merge-sub-table-schemas %2 %3)))
-                            super-table-schema)))]
-    (->> database-schema
-         (remove (comp :super-table-key second))
-         (reduce (fn [acc [table-key table-schema]]
-                   (let [rdbms-table-schema (merge-sub-table-schemas table-key table-schema)]
-                       (assoc acc table-key (cond-> rdbms-table-schema
-                                              (not= rdbms-table-schema table-schema) (assoc-in [:columns :type] {:type :string})))))
-                    {}))))
+  (->> database-schema
+       (remove (comp :super-table-key second))
+       (reduce (fn [acc [table-key table-schema]]
+                 (let [rdbms-table-schema (merge-sub-table-schemas database-schema table-key)]
+                   (assoc acc table-key (cond-> rdbms-table-schema
+                                          (not= rdbms-table-schema table-schema) (assoc-in [:columns :type] {:type :string})))))
+               {})))
 
 (defn many-to-one-relationship-key-to-physical-column-key
   "Returns a column keyword from many-to-one-relationship-key.  
@@ -198,7 +212,7 @@
     clojure.lang.IPersistentMap
     (valAt [_ key]
       (if-let [row-data (get table-data key)]
-        (if-not (:--deleted? row-data)
+        (if (not (:--deleted? row-data))
           (row database table-key table-schema row-data))))
     (entryAt [this key]
       (if-let [val (.valAt this key)]
