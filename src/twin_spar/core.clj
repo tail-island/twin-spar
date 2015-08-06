@@ -13,7 +13,7 @@
 ;; Please create a map which shows database schema, when using twin-spar.
 (comment
   ;; syntax
-  {:table-key {:super-table-key           :super-table-key-when-inherits
+  {:table-key {:super-table-key           :super-table-key-if-inherits
                :columns                   {:column-key       {:type      :column-type, :constraint "DB columns constraint"}}
                :many-to-one-relationships {:relationship-key {:table-key :parent-table}}
                :one-to-many-relationships {:relationship-key {:table-key :child-table, :many-to-one-relationship-key :reverse-relationship-key}}}}
@@ -101,7 +101,7 @@
 (defn- rdbms-database-schema
   [database-schema]
   (->> database-schema
-       (remove (comp :super-table-key second))
+       (filter (complement (comp :super-table-key second)))
        (reduce (fn [acc [table-key table-schema]]
                  (let [rdbms-table-schema (sub-table-merged-table-schema database-schema table-key)]
                    (assoc acc table-key (cond-> rdbms-table-schema
@@ -135,7 +135,7 @@
 
 (defprotocol IDataHolder
   "Data. Database, tables and rows."
-  (get-data    [_] "Returns a map that shows data."))
+  (get-data [_] "Returns a map that shows data."))
 
 (defprotocol IDatabaseElement
   "A database element. Tables and rows."
@@ -240,10 +240,8 @@
         (if (.valAt this key)
           (table database rdbms-table-key table-keys table-schema (dissoc table-data key) :changes (update-in changes [rdbms-table-key key] #(assoc % :--deleted? true, :--modified true)))
           this))
-      (count [_]
-        (->> (vals table-data)
-             (filter valid-row-data?)
-             (count)))
+      (count [this]
+        (count (seq this)))
       (iterator [this]
         (.iterator (or (seq this) {})))
       IDataHolder
@@ -366,9 +364,9 @@
                                                                                        [:key (:table-key relationship-schema) (many-to-one-relationship-key-to-physical-column-key (:many-to-one-relationship-key relationship-schema))]))]
                               (let [next-alias-key (keyword (<< "--t-~(swap! alias-number inc)"))]
                                 (-> (normalize-property-key next-table-key next-alias-key more)
-                                    (update-in [:join-clause] #(string/join " " (keep not-empty [(<< "LEFT JOIN ~(sql-name (rdbms-table-key next-table-key)) AS ~(sql-name next-alias-key) "
-                                                                                                     "ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key))")
-                                                                                                 %])))))
+                                    (update-in [:join-clause] #(string/join " " (keep identity [(<< "LEFT JOIN ~(sql-name (rdbms-table-key next-table-key)) AS ~(sql-name next-alias-key) "
+                                                                                                    "ON (~(sql-name next-alias-key).~(sql-name next-column-key) = ~(sql-name alias-key).~(sql-name column-key))")
+                                                                                                %])))))
                               {:join-clause  nil
                                :where-clause (<< "~(sql-name alias-key).~(sql-name property-key)")})))
                         (normalize-condition [condition]
@@ -397,13 +395,13 @@
                                                 (mapcat sql-parameters condition))
                             :else             (if-not (nil? condition)
                                                 [condition])))
-                        (add-sti-type [sql-parts]
+                        (add-sti-type-condition [sql-parts]
                           (cond-> sql-parts
                             (not= (rdbms-table-key table-key) table-key) ((fn [[join-clause where-clause sql-parameters]]
                                                                             [join-clause
                                                                              (<< "~(sql-name (rdbms-table-key table-key)).\"type\" = ? AND ~{where-clause}")
                                                                              (cons (name table-key) sql-parameters)]))))]
-                  (let [[join-clause where-clause sql-parameters] (add-sti-type ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true))))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えておきます。
+                  (let [[join-clause where-clause sql-parameters] (add-sti-type-condition ((juxt join-clause where-clause sql-parameters) (normalize-condition (or condition true))))]  ; conditionが指定されない場合はWHERE NULLになってしまうので、必ず真になる値に置き換えておきます。
                     (apply vector
                       (wrap-select-* table-key (<< "SELECT DISTINCT ~(sql-name (rdbms-table-key table-key)).*, true AS \"--match-condition?\" FROM ~(sql-name (rdbms-table-key table-key)) ~{join-clause} WHERE ~{where-clause}"))
                       sql-parameters)))))
@@ -469,10 +467,9 @@
             (when (not= (first execute-results) 1)
               (throw (ex-info "data had been updated by another user" {}))))
           (update [table-key table-schema & updates]
-            (let [[inserted-rows modified-rows deleted-rows] (let [physical-column-keys (physical-column-keys table-schema)]
-                                                               (map (fn [updated-rows]
-                                                                      (map #(select-keys % physical-column-keys) updated-rows))
-                                                                    updates))]
+            (let [[inserted-rows modified-rows deleted-rows] (map (fn [updated-rows]
+                                                                    (map #(select-keys % (physical-column-keys table-schema)) updated-rows))
+                                                                  updates)]
               (doseq [row inserted-rows]
                 (log/info (<< "Inserting data.\n~{table-key}\n~(pformat row)"))
                 (jdbc/insert! database-spec table-key (assoc row :modified-at (time/now)) :entities (jdbc/quoted \")))
